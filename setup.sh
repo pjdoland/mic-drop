@@ -268,7 +268,7 @@ install_tortoise() {
     else
         info "Cloning tortoise-tts from GitHub …"
         mkdir -p "$BUILD_DIR"
-        if git clone --depth 1 https://github.com/betteroi/tortoise-tts.git \
+        if git clone --depth 1 https://github.com/neonbjb/tortoise-tts.git \
                 "$CLONE_DIR" --quiet 2>/dev/null; then
             ok "Cloned tortoise-tts source."
         else
@@ -279,7 +279,7 @@ install_tortoise() {
                 warn "tortoise-tts could not be installed."
                 warn "  Try manually:"
                 warn "      pip install numba inflect psutil transformers"
-                warn "      git clone --depth 1 https://github.com/betteroi/tortoise-tts.git"
+                warn "      git clone --depth 1 https://github.com/neonbjb/tortoise-tts.git"
                 warn "      pip install -e tortoise-tts"
             fi
             return 0

@@ -2,7 +2,7 @@
 
 **Local voice-cloning TTS — no mic required.**
 
-mic-drop chains [Tortoise TTS](https://github.com/betteroi/tortoise-tts) (text → speech) with [RVC](https://github.com/retrieval-based-voice-conversion) (speech → your voice) into a single command-line tool. Everything runs locally — no cloud APIs, no subscriptions.
+mic-drop chains [Tortoise TTS](https://github.com/neonbjb/tortoise-tts) (text → speech) with [RVC](https://github.com/retrieval-based-voice-conversion) (speech → your voice) into a single command-line tool. Everything runs locally — no cloud APIs, no subscriptions.
 
 ```
 text  ──▶  Tortoise TTS  ──▶  raw speech (24 kHz)
