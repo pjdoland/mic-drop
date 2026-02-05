@@ -1,0 +1,3 @@
+Welcome to mic-drop, the local voice-cloning text-to-speech system.
+This short example script demonstrates the basic pipeline.
+Simply run the tool, point it at your RVC model, and listen.

@@ -1,0 +1,38 @@
+# ---------------------------------------------------------------------------
+# mic-drop — RVC voice-conversion dependencies
+# ---------------------------------------------------------------------------
+#
+# WHY a separate file?
+#   fairseq (a hard dependency of RVC) has a dependency tree that breaks
+#   with pip >= 24.1.  Isolating these installs lets setup.sh temporarily
+#   pin pip to 24.0 for this step only, then restore it, without touching
+#   anything else in the environment.
+#
+# MANUAL install (if setup.sh didn't handle it, or you want to redo):
+#   pip install pip==24.0
+#   pip install -r requirements-rvc.txt
+#   pip install --upgrade pip          # restore latest pip
+#
+# ---------------------------------------------------------------------------
+
+# Core RVC library
+rvc-python>=0.1.0
+
+# Fairseq — speech toolkit required by RVC internals.
+# NOTE: some fairseq code paths call torch.load without weights_only.
+#       This is expected and harmless for local, trusted model files.
+fairseq>=0.12.0
+
+# Audio-processing helpers consumed by RVC
+librosa>=0.10.0
+resampy>=0.4.0
+
+# ---------------------------------------------------------------------------
+# The packages below are already pulled in by the main requirements.txt and
+# the PyTorch step in setup.sh.  They are repeated here only so that a
+# standalone  pip install -r requirements-rvc.txt  is self-contained.
+# ---------------------------------------------------------------------------
+torch>=2.0.0
+torchaudio>=2.0.0
+soundfile>=0.12.0
+numpy>=1.24.0

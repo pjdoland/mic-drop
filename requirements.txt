@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------------------
+# mic-drop — dependency manifest
+# ---------------------------------------------------------------------------
+#
+# PyTorch / torchaudio platform notes
+#   macOS (Intel + Apple Silicon)
+#       Plain  pip install torch torchaudio  pulls in MPS Metal support.
+#       Do NOT pass --index-url; the default index is correct for macOS.
+#
+#   Linux — NVIDIA GPU
+#       Install from the CUDA wheel index first, e.g.:
+#         pip install torch torchaudio --index-url \
+#               https://download.pytorch.org/whl/cu121
+#
+#   The ./setup.sh script detects the platform and does the right thing.
+#
+# ---------------------------------------------------------------------------
+
+# -- Deep-learning runtime -----------------------------------------------
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# -- Audio I/O -----------------------------------------------------------
+soundfile>=0.12.0
+
+# -- Numerics ------------------------------------------------------------
+numpy>=1.24.0
+
+# -- CLI / progress ------------------------------------------------------
+tqdm>=4.65.0
+
+# ---------------------------------------------------------------------------
+# Optional: Tortoise TTS
+#   Installed best-effort by setup.sh.  Manual fallback:
+#       pip install tortoise-tts
+# ---------------------------------------------------------------------------
+tortoise-tts>=0.1.0
+
+# ---------------------------------------------------------------------------
+# Optional: RVC voice conversion
+#   RVC + fairseq have a fragile dependency tree that breaks with pip 24.1+.
+#   Do NOT install rvc-python with a plain pip install.  Use the dedicated
+#   file and the pip-downgrade dance it documents:
+#       pip install pip==24.0
+#       pip install -r requirements-rvc.txt
+#       pip install --upgrade pip
+#   setup.sh runs all of this automatically.
+# ---------------------------------------------------------------------------
+# (see requirements-rvc.txt)
