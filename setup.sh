@@ -355,7 +355,6 @@ ok "pytest ready"
 step "Verification"
 
 CORE_PASS=0; CORE_TOTAL=0
-OPT_PASS=0;  OPT_TOTAL=0
 
 check_core() {
     CORE_TOTAL=$((CORE_TOTAL + 1))
@@ -366,28 +365,16 @@ check_core() {
     fi
 }
 
-check_opt() {
-    OPT_TOTAL=$((OPT_TOTAL + 1))
-    if python -c "import $1" 2>/dev/null; then
-        ok "$2";  OPT_PASS=$((OPT_PASS + 1))
-    else
-        warn "$2 — not installed (optional)"
-    fi
-}
-
-# Core
 check_core "torch"         "torch"
 check_core "torchaudio"    "torchaudio"
 check_core "numpy"         "numpy"
 check_core "soundfile"     "soundfile"
 check_core "tqdm"          "tqdm"
 check_core "tts_pipeline"  "mic-drop"
-
-# Optional ML backends
-check_opt "tortoise"  "tortoise-tts"
-check_opt "rvc"       "rvc-python"
-check_opt "fairseq"   "fairseq"
-check_opt "librosa"   "librosa"
+check_core "tortoise"      "tortoise-tts"
+check_core "rvc"           "rvc-python"
+check_core "fairseq"       "fairseq"
+check_core "librosa"       "librosa"
 
 # Device summary (heredoc keeps the Python quoting painless)
 printf "\n"
@@ -427,13 +414,9 @@ printf "\n${CYAN}${BOLD}"
 printf "  ╔══════════════════════════════════════╗\n"
 
 if [[ $CORE_PASS -eq $CORE_TOTAL ]]; then
-    if [[ $OPT_PASS -eq $OPT_TOTAL ]]; then
-        printf "  ║  ${GREEN}${BOLD}All checks passed${NC}${CYAN}${BOLD}                  ║\n"
-    else
-        printf "  ║  ${GREEN}${BOLD}Core OK${NC}${CYAN}${BOLD} — some optional pkgs missing  ║\n"
-    fi
+    printf "  ║  ${GREEN}${BOLD}All checks passed${NC}${CYAN}${BOLD}                  ║\n"
 else
-    printf "  ║  ${RED}${BOLD}Core dependencies missing!${NC}${CYAN}${BOLD}           ║\n"
+    printf "  ║  ${RED}${BOLD}Dependencies missing!${NC}${CYAN}${BOLD}               ║\n"
 fi
 
 printf "  ╚══════════════════════════════════════╝${NC}\n"
@@ -445,10 +428,5 @@ printf "          | python -m tts_pipeline \\\\\n"
 printf "              -o output/test.wav \\\\\n"
 printf "              -m models/your_model.pth\n\n"
 
-if [[ $OPT_PASS -lt $OPT_TOTAL ]]; then
-    printf "  ${YELLOW}⚠  One or more optional ML backends are missing.\n"
-    printf "     Install them manually and re-run ./setup.sh to verify.${NC}\n\n"
-fi
-
-# Exit non-zero only when a *core* package is missing.
+# Exit non-zero when any required package is missing.
 exit $(( CORE_TOTAL - CORE_PASS ))
