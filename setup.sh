@@ -257,8 +257,14 @@ install_tortoise() {
         return 0
     fi
 
-    info "Installing tortoise-tts pre-dependencies …"
-    pip install numba inflect psutil transformers --quiet 2>/dev/null || true
+    # Install all runtime deps with current wheels BEFORE the editable
+    # install.  tortoise-tts hard-pins old versions of transformers /
+    # tokenizers that have no Python 3.14 wheels; --no-deps below
+    # prevents those pins from overriding what we install here.
+    info "Installing tortoise-tts dependencies …"
+    pip install numba inflect psutil transformers tokenizers \
+        rotary_embedding_torch progressbar einops unidecode scipy \
+        --quiet 2>/dev/null || true
 
     local CLONE_DIR="${BUILD_DIR}/tortoise-tts"
 
@@ -287,7 +293,7 @@ install_tortoise() {
     fi
 
     info "Installing tortoise-tts from local clone …"
-    if pip install -e "$CLONE_DIR" --quiet 2>/dev/null; then
+    if pip install -e "$CLONE_DIR" --no-deps --quiet 2>/dev/null; then
         ok "tortoise-tts installed from source."
     else
         warn "pip install from clone failed — trying PyPI wheel as fallback …"
