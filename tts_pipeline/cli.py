@@ -142,6 +142,14 @@ def build_parser() -> argparse.ArgumentParser:
             "Markdown via stdin."
         ),
     )
+    io_group.add_argument(
+        "--save-intermediate",
+        action="store_true",
+        help=(
+            "Save the pre-RVC Tortoise TTS output alongside the final "
+            "output file (with _pre_rvc suffix). Useful for debugging."
+        ),
+    )
 
     # -- Voice model ---------------------------------------------------------
     model_group = parser.add_argument_group("Voice Model")
@@ -379,6 +387,7 @@ def _build_pipeline(args: argparse.Namespace):  # noqa: ANN202
         output_sample_rate=args.sample_rate,
         device=args.device,
         cache_dir=args.cache_dir,
+        save_intermediate=args.save_intermediate,
     )
 
 

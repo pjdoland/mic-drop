@@ -227,6 +227,7 @@ mic-drop -i scripts/example.txt -o output/example.wav -m models/myvoice.pth
 | `-i`, `--input` | stdin | Input `.txt` or `.md` file, or directory in `--batch` mode |
 | `-o`, `--output` | _required_ | Output WAV path, or output directory in `--batch` mode |
 | `--strip-markdown` | auto | Strip Markdown syntax before synthesis. Automatic for `.md` files; required when piping Markdown via stdin |
+| `--save-intermediate` | — | Save pre-RVC Tortoise TTS output alongside final output (with `_pre_rvc` suffix). Useful for debugging |
 | `-m`, `--voice-model` | _required_ | Path to RVC `.pth` model |
 | `--rvc-index` | _none_ | Path to companion RVC `.index` file |
 | `--tortoise-preset` | `standard` | Quality preset: `ultra_fast` / `fast` / `standard` / `high_quality` |

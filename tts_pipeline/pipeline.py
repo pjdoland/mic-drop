@@ -43,6 +43,9 @@ class Pipeline:
         Directory where Tortoise downloads its model weights (~2–4 GB).
         Useful when running from a USB drive.  ``None`` uses the Tortoise
         default (``~/.cache/tortoise-tts``).
+    save_intermediate:
+        If ``True``, save the pre-RVC Tortoise TTS output alongside the
+        final output file (with ``_pre_rvc`` suffix).
     """
 
     def __init__(
@@ -56,11 +59,13 @@ class Pipeline:
         output_sample_rate: int = 44_100,
         device: str = "auto",
         cache_dir: Optional[Path] = None,
+        save_intermediate: bool = False,
     ) -> None:
         from tts_pipeline.tortoise import TortoiseEngine
         from tts_pipeline.rvc import RVCEngine
 
         self.output_sample_rate = output_sample_rate
+        self.save_intermediate = save_intermediate
 
         self.tortoise = TortoiseEngine(
             preset=tortoise_preset,
@@ -93,6 +98,13 @@ class Pipeline:
         logger.info("Stage 1/3: Tortoise TTS synthesis")
         raw_audio: np.ndarray = self.tortoise.synthesize(text)
         raw_sr: int = self.tortoise.sample_rate
+
+        # Optionally save pre-RVC intermediate audio
+        if self.save_intermediate:
+            intermediate_path = output_path.parent / f"{output_path.stem}_pre_rvc{output_path.suffix}"
+            logger.info("Saving intermediate Tortoise output → %s", intermediate_path)
+            intermediate = _peak_normalize(raw_audio)
+            _write_wav(intermediate, raw_sr, intermediate_path)
 
         # Stage 2 – voice conversion
         logger.info("Stage 2/3: RVC voice conversion")
