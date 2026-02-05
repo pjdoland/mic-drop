@@ -34,7 +34,7 @@ echo "Hello from mic-drop." | mic-drop -o output/hello.wav -m models/your_model.
 
 | Requirement | Notes |
 |---|---|
-| Python ≥ 3.9 | 3.10+ recommended |
+| Python 3.10.x | **Required** — RVC dependencies break on 3.11+ |
 | NVIDIA GPU + CUDA | Optional but strongly recommended for speed |
 | ~8 GB free RAM | Tortoise + RVC combined footprint |
 

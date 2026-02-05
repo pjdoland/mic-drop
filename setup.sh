@@ -61,23 +61,32 @@ fi
 step "Python"
 
 PYTHON=""
-if   [[ -x /opt/homebrew/bin/python3 ]]; then
-    PYTHON=/opt/homebrew/bin/python3            # Homebrew — Apple Silicon
+# Prefer python3.10 explicitly (RVC requirement)
+if   [[ -x /opt/homebrew/bin/python3.10 ]]; then
+    PYTHON=/opt/homebrew/bin/python3.10        # Homebrew — Apple Silicon
+elif [[ -x /usr/local/bin/python3.10   ]]; then
+    PYTHON=/usr/local/bin/python3.10          # Homebrew — Intel
+elif command -v python3.10 >/dev/null 2>&1; then
+    PYTHON="$(command -v python3.10)"         # system
+elif [[ -x /opt/homebrew/bin/python3 ]]; then
+    PYTHON=/opt/homebrew/bin/python3          # Homebrew — Apple Silicon (fallback)
 elif [[ -x /usr/local/bin/python3   ]]; then
-    PYTHON=/usr/local/bin/python3              # Homebrew — Intel
+    PYTHON=/usr/local/bin/python3            # Homebrew — Intel (fallback)
 elif command -v python3 >/dev/null 2>&1; then
-    PYTHON="$(command -v python3)"             # system / Xcode CLI
+    PYTHON="$(command -v python3)"           # system / Xcode CLI (fallback)
 fi
 
 [[ -z "$PYTHON" ]] && \
-    fail "Python 3.9+ not found.  Install via Homebrew:  brew install python"
+    fail "Python not found.  Install Python 3.10 via Homebrew:  brew install python@3.10"
 
-# Version gate
+# Version gate — RVC dependencies require exactly Python 3.10
 read -r PY_MAJ PY_MIN < <(
     "$PYTHON" -c "import sys; print(sys.version_info.major, sys.version_info.minor)"
 )
-( [[ $PY_MAJ -gt 3 ]] || ( [[ $PY_MAJ -eq 3 ]] && [[ $PY_MIN -ge 9 ]] ) ) \
-    || fail "Python 3.9+ required — found ${PY_MAJ}.${PY_MIN}."
+
+if [[ $PY_MAJ -ne 3 ]] || [[ $PY_MIN -ne 10 ]]; then
+    fail "Python 3.10.x is required for RVC compatibility (found ${PY_MAJ}.${PY_MIN}).\n  Python 3.11+ breaks fairseq/hydra/antlr4 dependencies.\n  Install Python 3.10 via Homebrew:  brew install python@3.10"
+fi
 
 ok "Python ${PY_MAJ}.${PY_MIN}  (${PYTHON})"
 
@@ -315,34 +324,44 @@ install_tortoise
 step "RVC"
 
 install_rvc() {
-    if python -c "import rvc" 2>/dev/null; then
+    if python -c "import rvc_python" 2>/dev/null; then
         ok "rvc-python — already installed."
         return 0
     fi
 
-    info "Installing RVC (temporary pip 24.0 pin for fairseq …)"
+    # rvc-python hard-pins faiss-cpu==1.7.3 (gone from PyPI) and
+    # numpy<=1.23.5 (incompatible with torch 2.x).  Install every dep
+    # with a current wheel first, then --no-deps the package itself so
+    # those pins are never consulted.  fairseq is installed separately
+    # because it requires pip==24.0 (omegaconf<2.1 non-standard spec).
 
-    # Remember what's installed now so we can restore afterwards
-    local ORIG_PIP
-    ORIG_PIP="$(pip --version | awk '{print $2}')"
-    info "  Current pip: ${ORIG_PIP}  →  pinning to 24.0"
+    info "Installing RVC dependencies …"
+    pip install faiss-cpu av fastapi ffmpeg-python loguru \
+        praat-parselmouth pydantic python-multipart pyworld \
+        requests torchcrepe uvicorn librosa resampy \
+        --quiet 2>/dev/null || true
+    ok "RVC dependencies installed."
 
+    info "Installing fairseq (temporary pip 24.0 pin …)"
     pip install "pip==24.0" --quiet 2>/dev/null || true
 
-    if pip install -r "${SCRIPT_DIR}/requirements-rvc.txt" --quiet 2>/dev/null; then
-        ok "rvc-python + fairseq + librosa installed."
+    if pip install fairseq --quiet 2>/dev/null; then
+        ok "fairseq installed."
     else
-        warn "RVC install failed even at pip 24.0."
-        warn "  Try the manual steps in requirements-rvc.txt:"
-        warn "      pip install pip==24.0"
-        warn "      pip install -r requirements-rvc.txt"
-        warn "      pip install --upgrade pip"
+        warn "fairseq install failed."
+        warn "  Try manually:  pip install pip==24.0 && pip install fairseq"
     fi
 
-    # Restore pip to latest regardless of success/failure
     info "  Restoring pip …"
     pip install --upgrade pip --quiet 2>/dev/null || true
-    return 0   # always succeed — RVC is optional
+
+    info "Installing rvc-python …"
+    if pip install rvc-python --no-deps --quiet 2>/dev/null; then
+        ok "rvc-python installed."
+    else
+        warn "rvc-python could not be installed."
+        warn "  Try manually:  pip install rvc-python --no-deps"
+    fi
 }
 
 install_rvc
@@ -378,7 +397,7 @@ check_core "soundfile"     "soundfile"
 check_core "tqdm"          "tqdm"
 check_core "tts_pipeline"  "mic-drop"
 check_core "tortoise"      "tortoise-tts"
-check_core "rvc"           "rvc-python"
+check_core "rvc_python"    "rvc-python"
 check_core "fairseq"       "fairseq"
 check_core "librosa"       "librosa"
 

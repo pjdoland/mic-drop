@@ -11,7 +11,7 @@ setup(
     long_description=Path("README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
     author="mic-drop",
-    python_requires=">=3.9",
+    python_requires="==3.10.*",
     packages=find_packages(exclude=["tests", "tests.*"]),
     install_requires=[
         "torch>=2.0.0",
@@ -42,12 +42,7 @@ setup(
         "Development Status :: 3 - Alpha",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Programming Language :: Python :: 3.13",
-        "Programming Language :: Python :: 3.14",
         "Topic :: Multimedia :: Audio",
     ],
 )
