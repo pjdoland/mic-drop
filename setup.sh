@@ -27,6 +27,8 @@ step() { printf "\n${BOLD}${CYAN}── $* ──${NC}\n"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV="${SCRIPT_DIR}/venv"
+ENV_FILE="${SCRIPT_DIR}/.mic-drop.env"
+BUILD_DIR="${SCRIPT_DIR}/.build"
 
 # ---------------------------------------------------------------------------
 # Banner
@@ -97,68 +99,215 @@ source "${VENV}/bin/activate"
 pip install --upgrade pip --quiet 2>/dev/null || true
 
 # =============================================================================
-# 4. PyTorch + torchaudio
-#    macOS: the default PyPI wheel already includes MPS Metal support.
-#    Do NOT pass --index-url here.
+# 4. Cache directory — ask where Tortoise should store its model weights
+#    (~2–4 GB).  The choice is persisted in .mic-drop.env so subsequent runs
+#    and the CLI itself can read it without the user having to re-type it.
+# =============================================================================
+step "Cache directory"
+
+# Helper: read a line from the terminal even when stdin is a pipe.
+prompt() {
+    # $1 = prompt text
+    if [[ -t 0 ]]; then
+        read -r -p "$1" REPLY
+    else
+        # Non-interactive (piped stdin) — print the prompt, default to empty
+        printf "%s" "$1" >&2
+        REPLY=""
+    fi
+}
+
+_read_existing_cache() {
+    # Returns the value of TORTOISE_CACHE_DIR from .mic-drop.env, or empty.
+    if [[ -f "$ENV_FILE" ]]; then
+        grep -m1 '^TORTOISE_CACHE_DIR=' "$ENV_FILE" | cut -d= -f2-
+    fi
+}
+
+EXISTING_CACHE="$(_read_existing_cache)"
+
+if [[ -n "$EXISTING_CACHE" ]]; then
+    # Already configured — show current value and let user keep or change it.
+    info "Current cache directory: ${EXISTING_CACHE}"
+    prompt "  Keep this path? [Y/n] "
+    if [[ "$REPLY" =~ ^[nN] ]]; then
+        EXISTING_CACHE=""   # fall through to the chooser below
+    else
+        CACHE_DIR="$EXISTING_CACHE"
+        ok "Using existing cache directory."
+    fi
+fi
+
+if [[ -z "$EXISTING_CACHE" ]]; then
+    printf "\n"
+    printf "  Tortoise downloads ~2–4 GB of model weights on first run.\n"
+    printf "  Where should they be stored?\n\n"
+    printf "    ${BOLD}1${NC}  Inside this project    (${SCRIPT_DIR}/tortoise_cache)\n"
+    printf "    ${BOLD}2${NC}  On a USB / thumb drive (you'll enter the path)\n"
+    printf "    ${BOLD}3${NC}  macOS default          (~/.cache/tortoise-tts)\n\n"
+
+    prompt "  Your choice [1/2/3] (default 1): "
+    CHOICE="${REPLY:-1}"
+
+    case "$CHOICE" in
+        1)
+            CACHE_DIR="${SCRIPT_DIR}/tortoise_cache"
+            ;;
+        2)
+            printf "\n"
+            prompt "  Enter the path to the cache directory on your USB drive: "
+            CACHE_DIR="$REPLY"
+            if [[ -z "$CACHE_DIR" ]]; then
+                warn "No path entered — falling back to project-local cache."
+                CACHE_DIR="${SCRIPT_DIR}/tortoise_cache"
+            fi
+            ;;
+        3)
+            CACHE_DIR="${HOME}/.cache/tortoise-tts"
+            ;;
+        *)
+            warn "Unrecognised choice '${CHOICE}' — falling back to project-local cache."
+            CACHE_DIR="${SCRIPT_DIR}/tortoise_cache"
+            ;;
+    esac
+
+    # Persist the choice
+    printf "TORTOISE_CACHE_DIR=%s\n" "$CACHE_DIR" > "$ENV_FILE"
+    ok "Cache directory set to: ${CACHE_DIR}"
+    info "Saved to .mic-drop.env (loaded automatically by the CLI)."
+fi
+
+# Create the directory now so the user gets immediate feedback
+mkdir -p "$CACHE_DIR"
+
+# =============================================================================
+# 5. PyTorch + torchaudio
+#    Apple Silicon (arm64):
+#        Tortoise needs ops that the stable macOS wheel doesn't always expose.
+#        The nightly CPU build covers all MPS-fallback paths.
+#        PYTORCH_ENABLE_MPS_FALLBACK=1 lets Metal ops silently fall back to CPU
+#        when the kernel isn't implemented yet.
+#    Intel Mac:
+#        The default PyPI (stable) wheel is fine.
 # =============================================================================
 step "PyTorch"
 
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+
 if python -c "import torch" 2>/dev/null; then
     TORCH_VER="$(python -c "import torch; print(torch.__version__)")"
-    ok "PyTorch ${TORCH_VER} — already installed."
+
+    # On arm64 the nightly build is required.  If the user has a stable build
+    # we need to upgrade — check for the '+' that nightlies carry in their
+    # version string (e.g. "2.3.0.dev20240101+cpu").
+    if [[ "$ARCH" == "arm64" ]]; then
+        if [[ "$TORCH_VER" != *"+"* ]] && [[ "$TORCH_VER" != *"dev"* ]]; then
+            warn "Stable PyTorch ${TORCH_VER} detected on Apple Silicon."
+            warn "  Upgrading to nightly build for full MPS-fallback support …"
+            pip install --pre torch torchaudio \
+                --index-url https://download.pytorch.org/whl/nightly/cpu \
+                --quiet 2>/dev/null || true
+            TORCH_VER="$(python -c "import torch; print(torch.__version__)")"
+            ok "PyTorch upgraded to ${TORCH_VER}"
+        else
+            ok "PyTorch ${TORCH_VER} (nightly) — already installed."
+        fi
+    else
+        ok "PyTorch ${TORCH_VER} — already installed."
+    fi
 else
-    info "Downloading PyTorch for macOS (MPS Metal included) …"
-    pip install torch torchaudio --quiet
+    if [[ "$ARCH" == "arm64" ]]; then
+        info "Downloading nightly PyTorch for Apple Silicon (MPS fallback) …"
+        pip install --pre torch torchaudio \
+            --index-url https://download.pytorch.org/whl/nightly/cpu \
+            --quiet
+    else
+        info "Downloading stable PyTorch for Intel Mac …"
+        pip install torch torchaudio --quiet
+    fi
     TORCH_VER="$(python -c "import torch; print(torch.__version__)")"
     ok "Installed PyTorch ${TORCH_VER}"
 fi
 
 # =============================================================================
-# 5. mic-drop package  (editable link + runtime deps)
+# 6. mic-drop package  (editable link + runtime deps)
 # =============================================================================
 step "mic-drop core"
 
 # Editable link without pulling heavy optional deps (tortoise / rvc).
-# Those are installed individually in step 6 so a failure in one doesn't
+# Those are installed individually in steps 7-8 so a failure in one doesn't
 # poison the other.
 pip install --no-deps -e "${SCRIPT_DIR}" --quiet
 ok "mic-drop linked in editable mode"
 
-# Remaining runtime deps (torch already present from step 4)
+# Remaining runtime deps (torch already present from step 5)
 pip install numpy soundfile tqdm torchaudio --quiet
 ok "Runtime dependencies installed"
 
 # =============================================================================
-# 6. ML backends  —  tortoise-tts & rvc-python  (best-effort)
+# 7. Tortoise TTS  —  installed from GitHub source for best Apple Silicon
+#    compatibility.  Pre-dependencies are installed first so that
+#    tortoise-tts's setup.py doesn't choke on missing build tools.
 # =============================================================================
-step "ML backends"
+step "Tortoise TTS"
 
-# Generic single-package installer.  Always returns 0 so set -e doesn't abort.
-install_backend() {
-    local pip_name="$1"
-    local import_name="$2"
-    local label="$3"
-
-    if python -c "import ${import_name}" 2>/dev/null; then
-        ok "${label} — already installed."
+install_tortoise() {
+    if python -c "import tortoise" 2>/dev/null; then
+        ok "tortoise-tts — already installed."
         return 0
     fi
 
-    info "Installing ${label} …"
-    if pip install "${pip_name}" --quiet 2>/dev/null; then
-        ok "${label} installed."
+    info "Installing tortoise-tts pre-dependencies …"
+    pip install numba inflect psutil transformers --quiet 2>/dev/null || true
+
+    local CLONE_DIR="${BUILD_DIR}/tortoise-tts"
+
+    if [[ -d "$CLONE_DIR" ]]; then
+        info "Updating tortoise-tts source …"
+        git -C "$CLONE_DIR" pull --quiet 2>/dev/null || true
     else
-        warn "${label} could not be installed automatically."
-        warn "  Retry manually later:  pip install ${pip_name}"
+        info "Cloning tortoise-tts from GitHub …"
+        mkdir -p "$BUILD_DIR"
+        if git clone --depth 1 https://github.com/betteroi/tortoise-tts.git \
+                "$CLONE_DIR" --quiet 2>/dev/null; then
+            ok "Cloned tortoise-tts source."
+        else
+            warn "git clone failed — trying PyPI wheel as fallback …"
+            if pip install tortoise-tts --quiet 2>/dev/null; then
+                ok "tortoise-tts installed from PyPI."
+            else
+                warn "tortoise-tts could not be installed."
+                warn "  Try manually:"
+                warn "      pip install numba inflect psutil transformers"
+                warn "      git clone --depth 1 https://github.com/betteroi/tortoise-tts.git"
+                warn "      pip install -e tortoise-tts"
+            fi
+            return 0
+        fi
+    fi
+
+    info "Installing tortoise-tts from local clone …"
+    if pip install -e "$CLONE_DIR" --quiet 2>/dev/null; then
+        ok "tortoise-tts installed from source."
+    else
+        warn "pip install from clone failed — trying PyPI wheel as fallback …"
+        if pip install tortoise-tts --quiet 2>/dev/null; then
+            ok "tortoise-tts installed from PyPI (fallback)."
+        else
+            warn "tortoise-tts could not be installed."
+            warn "  Try manually:  pip install -e ${CLONE_DIR}"
+        fi
     fi
     return 0
 }
 
-# ---------------------------------------------------------------------------
-# RVC + fairseq need pip==24.0.  pip 24.1+ resolves fairseq's dependency
-# tree incorrectly and the install fails.  We pin, install from the
-# dedicated requirements file, then restore pip.
-# ---------------------------------------------------------------------------
+install_tortoise
+
+# =============================================================================
+# 8. RVC  —  fairseq requires pip==24.0; pin, install, restore.
+# =============================================================================
+step "RVC"
+
 install_rvc() {
     if python -c "import rvc" 2>/dev/null; then
         ok "rvc-python — already installed."
@@ -190,11 +339,10 @@ install_rvc() {
     return 0   # always succeed — RVC is optional
 }
 
-install_backend "tortoise-tts"  "tortoise"  "tortoise-tts"
 install_rvc
 
 # =============================================================================
-# 7. Test tooling
+# 9. Test tooling
 # =============================================================================
 step "Test dependencies"
 
@@ -202,7 +350,7 @@ pip install pytest --quiet
 ok "pytest ready"
 
 # =============================================================================
-# 8. Verification — import every package and print a device summary
+# 10. Verification — import every package and print a device summary
 # =============================================================================
 step "Verification"
 
@@ -244,30 +392,36 @@ check_opt "librosa"   "librosa"
 # Device summary (heredoc keeps the Python quoting painless)
 printf "\n"
 python <<'PYEOF'
-import platform, torch
+import os, platform, torch
 
 cuda = torch.cuda.is_available()
 mps  = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
 best = "cuda" if cuda else ("mps" if mps else "cpu")
+fallback = os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK", "0")
 
 print("  Device summary:")
-print(f"    Architecture :  {platform.machine()}")
-print(f"    CUDA         :  {cuda}")
-print(f"    MPS (Metal)  :  {mps}")
-print(f"    auto  →         {best}")
+print(f"    Architecture          :  {platform.machine()}")
+print(f"    CUDA                  :  {cuda}")
+print(f"    MPS (Metal)           :  {mps}")
+print(f"    MPS fallback enabled  :  {fallback == '1'}")
+print(f"    auto  →                  {best}")
 if mps:
-    print("                    Apple Silicon Metal acceleration is available.")
+    print("                             Apple Silicon Metal acceleration is available.")
 PYEOF
 
+# Show where the cache ended up
+printf "\n"
+info "Tortoise cache directory: ${CACHE_DIR}"
+
 # =============================================================================
-# 9. Unit tests
+# 11. Unit tests
 # =============================================================================
 step "Unit tests"
 
 python -m pytest "${SCRIPT_DIR}/tests" -v --tb=short
 
 # =============================================================================
-# 10. Summary
+# 12. Summary
 # =============================================================================
 printf "\n${CYAN}${BOLD}"
 printf "  ╔══════════════════════════════════════╗\n"

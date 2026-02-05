@@ -22,3 +22,12 @@ output/*.wav
 *.egg-info/
 dist/
 build/
+
+# setup.sh writes this with the user's chosen cache path — machine-specific
+.mic-drop.env
+
+# git-cloned ML source trees (setup.sh populates)
+.build/
+
+# Tortoise model-cache when stored project-locally
+tortoise_cache/

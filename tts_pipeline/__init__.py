@@ -4,6 +4,13 @@ Chains Tortoise TTS (text → speech) with RVC (speech → cloned voice)
 into a single command-line tool.  Everything runs locally.
 """
 
+import os as _os
+
+# Apple Silicon: many MPS (Metal) ops are not yet implemented.  This env var
+# makes PyTorch silently fall back to CPU for those ops instead of crashing.
+# Must be set before the first ``import torch``.
+_os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+
 __version__ = "0.1.0"
 
 
