@@ -2,6 +2,12 @@
 # mic-drop — RVC voice-conversion dependencies
 # ---------------------------------------------------------------------------
 #
+# PYTHON VERSION REQUIREMENT: Python 3.10.x only
+#   RVC dependencies (fairseq → hydra → antlr4) are incompatible with
+#   Python 3.11+. Use Python 3.10.x specifically:
+#     brew install python@3.10
+#     python3.10 -m venv venv
+#
 # WHY a separate file?
 #   fairseq (a hard dependency of RVC) has a dependency tree that breaks
 #   with pip >= 24.1.  Isolating these installs lets setup.sh temporarily

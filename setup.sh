@@ -2,6 +2,10 @@
 # =============================================================================
 #  mic-drop — macOS setup & bootstrap
 #
+#  Requirements:
+#    • Python 3.10.x (brew install python@3.10)
+#    • macOS with Homebrew
+#
 #  Idempotent: safe to re-run at any time.  Every step checks whether its
 #  work is already done before acting.
 #
@@ -56,7 +60,8 @@ else
 fi
 
 # =============================================================================
-# 2. Python — prefer Homebrew, fall back to system
+# 2. Python 3.10 — required for RVC compatibility
+#    RVC dependencies (fairseq → hydra → antlr4) break on Python 3.11+
 # =============================================================================
 step "Python"
 
@@ -449,7 +454,7 @@ printf "  ╚══════════════════════�
 printf "\n  Quick start:\n"
 printf "      source venv/bin/activate\n"
 printf "      echo \"Hello from mic-drop.\" \\\\\n"
-printf "          | python -m tts_pipeline \\\\\n"
+printf "          | mic-drop \\\\\n"
 printf "              -o output/test.wav \\\\\n"
 printf "              -m models/your_model.pth\n\n"
 

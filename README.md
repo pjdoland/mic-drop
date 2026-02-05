@@ -21,6 +21,8 @@ text  ──▶  Tortoise TTS  ──▶  raw speech (24 kHz)
 
 ## Quick start
 
+**Requires Python 3.10.x** (`brew install python@3.10`)
+
 ```bash
 ./setup.sh                          # one-time bootstrap (venv, PyTorch, deps)
 echo "Hello from mic-drop." | mic-drop -o output/hello.wav -m models/your_model.pth
@@ -52,13 +54,15 @@ that was missing the first time.
 
 ### Steps — manual / Linux
 
+**Important:** Python 3.10.x is required. Python 3.11+ breaks RVC dependencies (fairseq, hydra, antlr4).
+
 ```bash
 # 1. Clone
 git clone <repo-url>
 cd mic-drop
 
-# 2. Virtual environment
-python -m venv venv
+# 2. Virtual environment with Python 3.10
+python3.10 -m venv venv
 source venv/bin/activate        # Linux / macOS
 # venv\Scripts\activate         # Windows
 
@@ -257,7 +261,7 @@ mic-drop/
 │   ├── cli.py               # argument parsing, config loading & dispatch
 │   ├── audio.py             # shared resample + peak-normalise helpers
 │   ├── tortoise.py          # Tortoise TTS wrapper + text chunking
-│   ├── rvc.py               # RVC voice-conversion wrapper
+│   ├── rvc.py               # RVC voice-conversion (w/ torch.load patch)
 │   └── pipeline.py          # end-to-end orchestration + WAV export
 ├── tests/
 │   ├── test_text_processing.py   # chunking & normalisation tests
@@ -297,6 +301,8 @@ pytest tests/
 | `ModuleNotFoundError: tortoise` | Run `./setup.sh` — it installs all ML backends in the correct order. |
 | `ModuleNotFoundError: rvc` | Do **not** `pip install rvc-python` directly. Run `pip install pip==24.0`, then `pip install -r requirements-rvc.txt`, then `pip install --upgrade pip`. See `requirements-rvc.txt` for details. |
 | RVC install fails / fairseq errors | Same as above — fairseq's dep tree breaks with pip ≥ 24.1. Pin to 24.0 first. |
+| `setup.sh` fails with "Python 3.10.x is required" | Install Python 3.10 via Homebrew: `brew install python@3.10`. Python 3.11+ breaks RVC dependencies (fairseq → hydra → antlr4). Delete your existing `venv/` and re-run `./setup.sh`. |
+| `ModuleNotFoundError: typing.io` or antlr4 errors | You're on Python 3.11+. Downgrade to Python 3.10 (see above). |
 | Tortoise or RVC crash on Apple Silicon | MPS support is experimental. Both engines fall back to CPU automatically on failure. Force it explicitly with `--device cpu` if the auto-fallback doesn't trigger. |
 | CUDA out of memory | Use `--tortoise-preset fast` or `ultra_fast`; fall back to `--device cpu` |
 | Audio is very quiet | The pipeline peak-normalises to 0.9 by default; check source levels |
