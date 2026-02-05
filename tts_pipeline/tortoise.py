@@ -230,11 +230,11 @@ class TortoiseEngine:
         ):
             logger.debug("Chunk %d/%d (%d words): %.60s …", i + 1, len(chunks), len(chunk.split()), chunk)
 
-            audio_tensor = self._tts.synthesize(
+            audio_tensor = self._tts.tts_with_preset(
                 chunk,
-                voice_samples,
-                conditioning_latents,
                 preset=self.preset,
+                voice_samples=voice_samples,
+                conditioning_latents=conditioning_latents,
             )
             # Tortoise returns shape (1, samples) or (samples,)
             segments.append(audio_tensor.squeeze().cpu().numpy())
@@ -251,18 +251,17 @@ class TortoiseEngine:
 
         Resolution order
         ----------------
-        1. ``None``        → Tortoise ``RandomVoice``
+        1. ``None``        → random conditioning latents
         2. Existing dir    → load all ``*.wav`` clips from it
         3. Existing .wav   → single clip
         4. String          → attempt to use as a built-in voice name
         """
         import torch
-        from tortoise.api import RandomVoice
         from tortoise.utils.audio import load_audio
 
         if self.voice is None:
-            logger.info("No voice specified — using Tortoise RandomVoice.")
-            return self._tts.load_voice(RandomVoice())
+            logger.info("No voice specified — using random conditioning latents.")
+            return None, None
 
         voice_path = Path(self.voice)
 
