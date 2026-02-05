@@ -38,7 +38,19 @@ echo "Hello from mic-drop." | python -m tts_pipeline -o output/hello.wav -m mode
 | NVIDIA GPU + CUDA | Optional but strongly recommended for speed |
 | ~8 GB free RAM | Tortoise + RVC combined footprint |
 
-### Steps
+### Steps — macOS (recommended)
+
+```bash
+git clone <repo-url>
+cd mic-drop
+chmod +x setup.sh
+./setup.sh          # creates venv, installs PyTorch + deps, runs tests
+```
+
+`setup.sh` is idempotent — re-running it is safe and will pick up anything
+that was missing the first time.
+
+### Steps — manual / Linux
 
 ```bash
 # 1. Clone
@@ -50,12 +62,19 @@ python -m venv venv
 source venv/bin/activate        # Linux / macOS
 # venv\Scripts\activate         # Windows
 
-# 3. Install CUDA-enabled PyTorch first (adjust URL for your CUDA version)
-# See https://pytorch.org/get-started/locally/
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+# 3. PyTorch
+#   macOS (Intel + Apple Silicon):
+pip install torch torchaudio
+#   Linux with NVIDIA GPU (adjust cu version as needed):
+# pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
 
-# 4. Install mic-drop and remaining deps
+# 4. mic-drop core
 pip install -e .
+
+# 5. RVC (needs pip 24.0 for fairseq — see requirements-rvc.txt)
+pip install pip==24.0
+pip install -r requirements-rvc.txt
+pip install --upgrade pip
 ```
 
 ---
@@ -72,6 +91,46 @@ mic-drop requires a pre-trained RVC `.pth` model — and optionally a companion 
    ├── myvoice.pth
    └── myvoice.index        # optional — improves quality
    ```
+
+---
+
+## Running from a USB / thumb drive
+
+Two things eat disk space: Tortoise downloads ~2–4 GB of model weights on
+first run, and each RVC voice model is typically 200–500 MB.  Both can live
+on a thumb drive so your main disk stays clean.
+
+### What goes on the drive
+
+```
+USB drive/
+├── tortoise_cache/     # created automatically on first run (~2–4 GB)
+├── models/
+│   ├── myvoice.pth
+│   └── myvoice.index
+├── scripts/            # optional — your .txt / .md input files
+└── output/             # optional — generated WAVs
+```
+
+### Wiring it up
+
+`--cache-dir` tells Tortoise where to download and cache its model weights.
+`--voice-model` and `--rvc-index` already accept any path, so just point
+everything at the drive:
+
+```bash
+python -m tts_pipeline \
+  --input           scripts/example.txt \
+  --output          /Volumes/USB/output/speech.wav \
+  --voice-model     /Volumes/USB/models/myvoice.pth \
+  --rvc-index       /Volumes/USB/models/myvoice.index \
+  --cache-dir       /Volumes/USB/tortoise_cache
+```
+
+The first run with a fresh `--cache-dir` will be slow while Tortoise
+downloads its weights.  Every subsequent run reads from the cache and is
+much faster.  The cache directory is fully portable — move the drive to
+another machine or mount point and just update the paths.
 
 ---
 
@@ -111,9 +170,27 @@ python -m tts_pipeline \
   --verbose
 ```
 
+### Markdown input
+
+`.md` files are accepted anywhere a `.txt` file is.  Markdown syntax
+(headers, bold, links, code blocks, lists …) is stripped automatically
+before synthesis.  When piping Markdown via stdin, add `--strip-markdown`:
+
+```bash
+python -m tts_pipeline \
+  --input           scripts/example.md \
+  --output          output/from-md.wav \
+  --voice-model     models/myvoice.pth
+
+cat notes.md | python -m tts_pipeline \
+  --strip-markdown \
+  -o output/notes.wav \
+  -m models/myvoice.pth
+```
+
 ### Batch mode
 
-Convert every `.txt` file in a directory:
+Convert every `.txt` and `.md` file in a directory:
 
 ```bash
 python -m tts_pipeline \
@@ -137,17 +214,19 @@ mic-drop -i scripts/example.txt -o output/example.wav -m models/myvoice.pth
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-i`, `--input` | stdin | Input `.txt` file, or directory in `--batch` mode |
+| `-i`, `--input` | stdin | Input `.txt` or `.md` file, or directory in `--batch` mode |
 | `-o`, `--output` | _required_ | Output WAV path, or output directory in `--batch` mode |
+| `--strip-markdown` | auto | Strip Markdown syntax before synthesis. Automatic for `.md` files; required when piping Markdown via stdin |
 | `-m`, `--voice-model` | _required_ | Path to RVC `.pth` model |
 | `--rvc-index` | _none_ | Path to companion RVC `.index` file |
 | `--tortoise-preset` | `standard` | Quality preset: `ultra_fast` / `fast` / `standard` / `high_quality` |
 | `--tortoise-voice` | random | Built-in voice name or path to reference WAV clip(s) |
+| `--cache-dir` | `~/.cache/tortoise-tts` | Tortoise model-cache directory (~2–4 GB on first run). Point at a USB drive to keep large files off your main disk |
 | `--rvc-pitch` | `0` | Pitch shift in semitones |
 | `--rvc-method` | `rmvpe` | Pitch extraction: `rmvpe` / `pm` / `crepe` |
 | `--sample-rate` | `44100` | Output Hz: `16000` / `22050` / `44100` / `48000` |
-| `--device` | `auto` | Torch device: `auto` / `cpu` / `cuda` |
-| `--batch` | — | Enable batch mode |
+| `--device` | `auto` | Torch device: `auto` / `cpu` / `cuda` / `mps` |
+| `--batch` | — | Batch mode: process every `.txt` / `.md` in `--input` directory |
 | `-v`, `--verbose` | — | Debug-level logging |
 
 ---
@@ -169,10 +248,13 @@ mic-drop/
 ├── models/                  # drop your .pth / .index files here
 ├── scripts/                 # example input texts
 │   ├── example.txt
+│   ├── example.md           # same example in Markdown
 │   └── dramatic.txt
 ├── output/                  # generated WAVs land here
-├── requirements.txt
+├── requirements.txt         # core runtime deps
+├── requirements-rvc.txt     # RVC + fairseq (needs pip 24.0 — see below)
 ├── setup.py
+├── setup.sh                 # macOS bootstrap script
 └── README.md
 ```
 
@@ -194,12 +276,15 @@ pytest tests/
 | Symptom | Fix |
 |---------|-----|
 | `ModuleNotFoundError: tortoise` | `pip install tortoise-tts` |
-| `ModuleNotFoundError: rvc` | `pip install rvc-python` |
+| `ModuleNotFoundError: rvc` | Do **not** `pip install rvc-python` directly. Run `pip install pip==24.0`, then `pip install -r requirements-rvc.txt`, then `pip install --upgrade pip`. See `requirements-rvc.txt` for details. |
+| RVC install fails / fairseq errors | Same as above — fairseq's dep tree breaks with pip ≥ 24.1. Pin to 24.0 first. |
+| Tortoise or RVC crash on Apple Silicon | MPS support is experimental. Both engines fall back to CPU automatically on failure. Force it explicitly with `--device cpu` if the auto-fallback doesn't trigger. |
 | CUDA out of memory | Use `--tortoise-preset fast` or `ultra_fast`; fall back to `--device cpu` |
 | Audio is very quiet | The pipeline peak-normalises to 0.9 by default; check source levels |
 | Model file not found | Confirm the exact path passed to `--voice-model` |
 | Very slow on long scripts | Lower `MAX_WORDS_PER_CHUNK` in `tortoise.py`; use `fast` preset |
 | Pitch sounds wrong | Try `--rvc-pitch 0` first, then adjust ±1 semitone at a time |
+| Tortoise re-downloads weights every run | Pass `--cache-dir` to a persistent directory. Without it Tortoise writes to `~/.cache/tortoise-tts`; if that path doesn't survive between runs the cache is lost. |
 
 ---
 
