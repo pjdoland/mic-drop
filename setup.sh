@@ -271,12 +271,12 @@ install_tortoise() {
         return 0
     fi
 
-    # Install all runtime deps with current wheels BEFORE the editable
-    # install.  tortoise-tts hard-pins old versions of transformers /
-    # tokenizers that have no Python 3.14 wheels; --no-deps below
-    # prevents those pins from overriding what we install here.
+    # Install all runtime deps BEFORE the editable install.
+    # Pin transformers to 4.31.0 (tortoise expectation); let it choose
+    # its own compatible tokenizers (<0.14). Don't pin scipy — tortoise's
+    # scipy==1.13.1 pin is stale; let it float.
     info "Installing tortoise-tts dependencies …"
-    pip install numba inflect psutil transformers tokenizers \
+    pip install numba inflect psutil transformers==4.31.0 \
         rotary_embedding_torch progressbar einops unidecode scipy \
         --quiet 2>/dev/null || true
 

@@ -186,7 +186,7 @@ class TortoiseEngine:
         tt_kwargs: dict = {"device": self.device}
         if self.cache_dir is not None:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            tt_kwargs["cache_dir"] = str(self.cache_dir)
+            tt_kwargs["models_dir"] = str(self.cache_dir)
             logger.info("Tortoise model cache → %s", self.cache_dir)
 
         try:
