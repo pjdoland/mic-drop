@@ -22,8 +22,8 @@ text  ──▶  Tortoise TTS  ──▶  raw speech (24 kHz)
 ## Quick start
 
 ```bash
-pip install -e .
-echo "Hello from mic-drop." | python -m tts_pipeline -o output/hello.wav -m models/your_model.pth
+./setup.sh                          # one-time bootstrap (venv, PyTorch, deps)
+echo "Hello from mic-drop." | mic-drop -o output/hello.wav -m models/your_model.pth
 ```
 
 ---
@@ -119,7 +119,7 @@ USB drive/
 everything at the drive:
 
 ```bash
-python -m tts_pipeline \
+mic-drop \
   --input           scripts/example.txt \
   --output          /Volumes/USB/output/speech.wav \
   --voice-model     /Volumes/USB/models/myvoice.pth \
@@ -131,6 +131,12 @@ The first run with a fresh `--cache-dir` will be slow while Tortoise
 downloads its weights.  Every subsequent run reads from the cache and is
 much faster.  The cache directory is fully portable — move the drive to
 another machine or mount point and just update the paths.
+
+**Tip:** `setup.sh` saves the cache directory you chose into
+`.mic-drop.env` at the repo root.  On every subsequent run `mic-drop`
+reads that file automatically, so you can omit `--cache-dir` entirely
+once it has been set.  Edit `.mic-drop.env` any time you move the drive
+to a new mount point.
 
 ---
 
@@ -221,13 +227,23 @@ mic-drop -i scripts/example.txt -o output/example.wav -m models/myvoice.pth
 | `--rvc-index` | _none_ | Path to companion RVC `.index` file |
 | `--tortoise-preset` | `standard` | Quality preset: `ultra_fast` / `fast` / `standard` / `high_quality` |
 | `--tortoise-voice` | random | Built-in voice name or path to reference WAV clip(s) |
-| `--cache-dir` | `~/.cache/tortoise-tts` | Tortoise model-cache directory (~2–4 GB on first run). Point at a USB drive to keep large files off your main disk |
+| `--cache-dir` | `.mic-drop.env`, then `~/.cache/tortoise-tts` | Tortoise model-cache directory (~2–4 GB on first run). Point at a USB drive to keep large files off your main disk |
 | `--rvc-pitch` | `0` | Pitch shift in semitones |
 | `--rvc-method` | `rmvpe` | Pitch extraction: `rmvpe` / `pm` / `crepe` |
 | `--sample-rate` | `44100` | Output Hz: `16000` / `22050` / `44100` / `48000` |
 | `--device` | `auto` | Torch device: `auto` / `cpu` / `cuda` / `mps` |
 | `--batch` | — | Batch mode: process every `.txt` / `.md` in `--input` directory |
 | `-v`, `--verbose` | — | Debug-level logging |
+| `-q`, `--quiet` | — | Warnings and errors only (mutually exclusive with `-v`) |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | Runtime error (bad input, missing file, processing failure) |
+| `2` | Usage error (unrecognised flag, missing required argument) |
+| `130` | Interrupted (Ctrl+C) |
 
 ---
 
@@ -236,15 +252,17 @@ mic-drop -i scripts/example.txt -o output/example.wav -m models/myvoice.pth
 ```
 mic-drop/
 ├── tts_pipeline/
-│   ├── __init__.py          # package metadata & version
+│   ├── __init__.py          # package metadata, version & MPS env flag
 │   ├── __main__.py          # python -m entry-point
-│   ├── cli.py               # argument parsing & dispatch
+│   ├── cli.py               # argument parsing, config loading & dispatch
+│   ├── audio.py             # shared resample + peak-normalise helpers
 │   ├── tortoise.py          # Tortoise TTS wrapper + text chunking
 │   ├── rvc.py               # RVC voice-conversion wrapper
-│   └── pipeline.py          # end-to-end orchestration + audio helpers
+│   └── pipeline.py          # end-to-end orchestration + WAV export
 ├── tests/
 │   ├── test_text_processing.py   # chunking & normalisation tests
-│   └── test_audio_utils.py       # peak-normalisation tests
+│   ├── test_audio_utils.py       # peak-normalisation tests
+│   └── test_cli.py               # CLI parsing, config & error tests
 ├── models/                  # drop your .pth / .index files here
 ├── scripts/                 # example input texts
 │   ├── example.txt
@@ -253,6 +271,7 @@ mic-drop/
 ├── output/                  # generated WAVs land here
 ├── requirements.txt         # core runtime deps
 ├── requirements-rvc.txt     # RVC + fairseq (needs pip 24.0 — see below)
+├── .mic-drop.env.example    # template for persistent config
 ├── setup.py
 ├── setup.sh                 # macOS bootstrap script
 └── README.md
@@ -275,7 +294,7 @@ pytest tests/
 
 | Symptom | Fix |
 |---------|-----|
-| `ModuleNotFoundError: tortoise` | `pip install tortoise-tts` |
+| `ModuleNotFoundError: tortoise` | Run `./setup.sh` — it installs all ML backends in the correct order. |
 | `ModuleNotFoundError: rvc` | Do **not** `pip install rvc-python` directly. Run `pip install pip==24.0`, then `pip install -r requirements-rvc.txt`, then `pip install --upgrade pip`. See `requirements-rvc.txt` for details. |
 | RVC install fails / fairseq errors | Same as above — fairseq's dep tree breaks with pip ≥ 24.1. Pin to 24.0 first. |
 | Tortoise or RVC crash on Apple Silicon | MPS support is experimental. Both engines fall back to CPU automatically on failure. Force it explicitly with `--device cpu` if the auto-fallback doesn't trigger. |
@@ -284,7 +303,7 @@ pytest tests/
 | Model file not found | Confirm the exact path passed to `--voice-model` |
 | Very slow on long scripts | Lower `MAX_WORDS_PER_CHUNK` in `tortoise.py`; use `fast` preset |
 | Pitch sounds wrong | Try `--rvc-pitch 0` first, then adjust ±1 semitone at a time |
-| Tortoise re-downloads weights every run | Pass `--cache-dir` to a persistent directory. Without it Tortoise writes to `~/.cache/tortoise-tts`; if that path doesn't survive between runs the cache is lost. |
+| Tortoise re-downloads weights every run | `setup.sh` saves your chosen cache path to `.mic-drop.env`, which `mic-drop` reads automatically. If you skipped that step, pass `--cache-dir` explicitly to a persistent directory. Without either, Tortoise defaults to `~/.cache/tortoise-tts`. |
 
 ---
 

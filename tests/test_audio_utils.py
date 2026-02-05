@@ -6,7 +6,7 @@ Requires numpy but not torch/soundfile — mocks are used for I/O where needed.
 import numpy as np
 import pytest
 
-from tts_pipeline.pipeline import _peak_normalize
+from tts_pipeline.audio import peak_normalize as _peak_normalize
 
 
 class TestPeakNormalize:

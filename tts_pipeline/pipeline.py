@@ -13,6 +13,8 @@ from typing import Optional
 
 import numpy as np
 
+from tts_pipeline.audio import peak_normalize as _peak_normalize, resample as _resample
+
 logger = logging.getLogger("mic-drop.pipeline")
 
 
@@ -109,35 +111,6 @@ class Pipeline:
             self.output_sample_rate,
             output_path,
         )
-
-
-# ---------------------------------------------------------------------------
-# Audio utilities (module-level so they can be tested independently)
-# ---------------------------------------------------------------------------
-
-
-def _resample(audio: np.ndarray, from_sr: int, to_sr: int) -> np.ndarray:
-    """Resample a 1-D float32 array via torchaudio."""
-    if from_sr == to_sr:
-        return audio
-
-    import torch
-    import torchaudio
-
-    tensor = torch.from_numpy(audio).unsqueeze(0)
-    resampled = torchaudio.transforms.Resample(from_sr, to_sr)(tensor)
-    return resampled.squeeze(0).numpy()
-
-
-def _peak_normalize(audio: np.ndarray, target: float = 0.9) -> np.ndarray:
-    """Peak-normalise so the loudest sample sits at *target* (0–1 scale).
-
-    Silent audio is returned unchanged to avoid division by zero.
-    """
-    peak = np.abs(audio).max()
-    if peak > 0:
-        audio = audio * (target / peak)
-    return audio
 
 
 def _write_wav(audio: np.ndarray, sample_rate: int, path: Path) -> None:

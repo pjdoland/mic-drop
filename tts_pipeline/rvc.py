@@ -30,6 +30,8 @@ from typing import Optional
 
 import numpy as np
 
+from tts_pipeline.audio import resample as _resample
+
 logger = logging.getLogger("mic-drop.rvc")
 
 # RVC models operate internally at 16 kHz.
@@ -87,11 +89,11 @@ class RVCEngine:
 
         try:
             self._load_rvc_python()
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "rvc-python is required but not installed.\n"
                 "Install it with:  pip install rvc-python"
-            )
+            ) from exc
 
         logger.info("RVC model loaded.")
 
@@ -171,20 +173,3 @@ class RVCEngine:
         )
         return np.asarray(result, dtype=np.float32)
 
-
-# ---------------------------------------------------------------------------
-# Utility
-# ---------------------------------------------------------------------------
-
-
-def _resample(audio: np.ndarray, from_sr: int, to_sr: int) -> np.ndarray:
-    """Resample a 1-D float32 array using torchaudio."""
-    if from_sr == to_sr:
-        return audio
-
-    import torch
-    import torchaudio
-
-    tensor = torch.from_numpy(audio).unsqueeze(0)  # (1, samples)
-    resampled = torchaudio.transforms.Resample(from_sr, to_sr)(tensor)
-    return resampled.squeeze(0).numpy()

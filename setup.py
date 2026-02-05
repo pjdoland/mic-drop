@@ -1,12 +1,14 @@
 """mic-drop — local voice-cloning TTS pipeline."""
 
+from pathlib import Path
+
 from setuptools import find_packages, setup
 
 setup(
     name="mic-drop",
     version="0.1.0",
     description="Local voice-cloning TTS: Tortoise TTS + RVC in one pipeline",
-    long_description=open("README.md", encoding="utf-8").read(),
+    long_description=Path("README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
     author="mic-drop",
     python_requires=">=3.9",
@@ -44,6 +46,8 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
         "Topic :: Multimedia :: Audio",
     ],
 )
