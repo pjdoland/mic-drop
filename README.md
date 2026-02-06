@@ -132,15 +132,71 @@ mic-drop \
 ```
 
 The first run with a fresh `--cache-dir` will be slow while Tortoise
-downloads its weights.  Every subsequent run reads from the cache and is
-much faster.  The cache directory is fully portable — move the drive to
+downloads its weights (~2-4 GB). Every subsequent run reads from the cache and is
+much faster. The cache directory is fully portable — move the drive to
 another machine or mount point and just update the paths.
+
+**Important:** mic-drop automatically configures HuggingFace's cache to use the same
+directory as `--cache-dir`, ensuring ALL model downloads (both Tortoise and HuggingFace Hub)
+go to your USB drive instead of filling up your system disk.
 
 **Tip:** `setup.sh` saves the cache directory you chose into
 `.mic-drop.env` at the repo root.  On every subsequent run `mic-drop`
 reads that file automatically, so you can omit `--cache-dir` entirely
 once it has been set.  Edit `.mic-drop.env` any time you move the drive
 to a new mount point.
+
+---
+
+## Understanding voice selection and prosody
+
+mic-drop uses a two-stage pipeline: **Tortoise TTS generates the base audio with prosody**
+(rhythm, intonation, pacing), then **RVC transforms the voice timbre** while preserving
+that prosody.
+
+### Why `--tortoise-voice` matters
+
+Even though RVC clones your target voice, the Tortoise voice you choose affects:
+- **Speaking pace** - some voices are naturally faster or slower
+- **Expressiveness** - some are more dynamic, others more monotone
+- **Intonation patterns** - how pitch rises and falls
+- **Pause placement** - natural rhythm and breathing
+
+### Choosing a Tortoise voice
+
+Built-in voices to try (pass via `--tortoise-voice`):
+
+| Voice | Characteristics |
+|-------|----------------|
+| `tom`, `daniel`, `william` | Male, neutral prosody, clear articulation |
+| `pat`, `pat2` | Different prosody styles |
+| `deniro`, `freeman` | Actor-based, more expressive |
+| `emma`, `angie`, `jlaw`, `halle` | Female voices |
+| `geralt` | Character voice with unique prosody |
+
+**Tip:** Use `--save-intermediate` to save the pre-RVC audio and compare how different
+Tortoise voices sound before and after RVC transformation:
+
+```bash
+mic-drop -i scripts/test.txt \
+  --tortoise-voice tom \
+  --save-intermediate \
+  -m models/myvoice.pth \
+  -o output/test.wav
+# Creates: output/test.wav (final) and output/test_pre_rvc.wav (Tortoise only)
+```
+
+### Speed vs. quality presets
+
+| Preset | Speed | Quality | Use case |
+|--------|-------|---------|----------|
+| `ultra_fast` | ⚡⚡⚡ | ★☆☆☆ | Testing, iteration, drafts |
+| `fast` | ⚡⚡ | ★★☆☆ | Good balance for most use cases |
+| `standard` | ⚡ | ★★★☆ | Default, slower but better quality |
+| `high_quality` | 🐌 | ★★★★ | Final output, very slow |
+
+**Recommendation:** Start with `ultra_fast` for iteration, then re-run with `fast` or
+`standard` for final output. RVC does most of the voice work, so ultra_fast is often good enough.
 
 ---
 
@@ -163,16 +219,17 @@ echo "Piped text works too." | python -m tts_pipeline \
   -m models/myvoice.pth
 ```
 
-### Full options
+### Full options example
 
 ```bash
-python -m tts_pipeline \
+mic-drop \
   --input           scripts/dramatic.txt \
   --output          output/dramatic.wav \
   --voice-model     models/myvoice.pth \
   --rvc-index       models/myvoice.index \
-  --tortoise-preset high_quality \
-  --tortoise-voice  female \
+  --tortoise-preset fast \
+  --tortoise-voice  tom \
+  --save-intermediate \
   --rvc-pitch       -2 \
   --rvc-method      rmvpe \
   --sample-rate     48000 \
@@ -230,8 +287,8 @@ mic-drop -i scripts/example.txt -o output/example.wav -m models/myvoice.pth
 | `--save-intermediate` | — | Save pre-RVC Tortoise TTS output alongside final output (with `_pre_rvc` suffix). Useful for debugging |
 | `-m`, `--voice-model` | _required_ | Path to RVC `.pth` model |
 | `--rvc-index` | _none_ | Path to companion RVC `.index` file |
-| `--tortoise-preset` | `standard` | Quality preset: `ultra_fast` / `fast` / `standard` / `high_quality` |
-| `--tortoise-voice` | random | Built-in voice name or path to reference WAV clip(s) |
+| `--tortoise-preset` | `standard` | Quality preset: `ultra_fast` / `fast` / `standard` / `high_quality`. Recommend `ultra_fast` for iteration, `fast` for final output. |
+| `--tortoise-voice` | random | Built-in voice name (tom, daniel, william, pat, emma, etc.) or path to reference WAV clip(s). Affects prosody (rhythm, intonation, pacing) even when using RVC. |
 | `--cache-dir` | `.mic-drop.env`, then `~/.cache/tortoise-tts` | Tortoise model-cache directory (~2–4 GB on first run). Point at a USB drive to keep large files off your main disk |
 | `--rvc-pitch` | `0` | Pitch shift in semitones |
 | `--rvc-method` | `rmvpe` | Pitch extraction: `rmvpe` / `pm` / `crepe` |
@@ -304,13 +361,17 @@ pytest tests/
 | RVC install fails / fairseq errors | Same as above — fairseq's dep tree breaks with pip ≥ 24.1. Pin to 24.0 first. |
 | `setup.sh` fails with "Python 3.10.x is required" | Install Python 3.10 via Homebrew: `brew install python@3.10`. Python 3.11+ breaks RVC dependencies (fairseq → hydra → antlr4). Delete your existing `venv/` and re-run `./setup.sh`. |
 | `ModuleNotFoundError: typing.io` or antlr4 errors | You're on Python 3.11+. Downgrade to Python 3.10 (see above). |
+| `'TextToSpeech' object has no attribute 'load_voice'` | Outdated tortoise-tts installation. Fixed in latest version — update with `pip install -e .` after pulling latest changes. |
+| `stack expects each tensor to be equal size` error with `--tortoise-voice` | Fixed in latest version. The built-in voices have variable-length clips that are now handled correctly. Update with `pip install -e .`. |
+| `No space left on device` while downloading models | Your system disk is full. Use `--cache-dir` to point to a USB drive or external storage with at least 4GB free space. mic-drop now properly redirects ALL downloads (Tortoise + HuggingFace) to your chosen cache directory. |
 | Tortoise or RVC crash on Apple Silicon | MPS support is experimental. Both engines fall back to CPU automatically on failure. Force it explicitly with `--device cpu` if the auto-fallback doesn't trigger. |
 | CUDA out of memory | Use `--tortoise-preset fast` or `ultra_fast`; fall back to `--device cpu` |
 | Audio is very quiet | The pipeline peak-normalises to 0.9 by default; check source levels |
 | Model file not found | Confirm the exact path passed to `--voice-model` |
-| Very slow on long scripts | Lower `MAX_WORDS_PER_CHUNK` in `tortoise.py`; use `fast` preset |
+| Very slow synthesis | Use `--tortoise-preset ultra_fast` for faster generation. Tortoise is inherently slow; even `ultra_fast` provides decent results since RVC does the heavy lifting for voice quality. |
 | Pitch sounds wrong | Try `--rvc-pitch 0` first, then adjust ±1 semitone at a time |
 | Tortoise re-downloads weights every run | `setup.sh` saves your chosen cache path to `.mic-drop.env`, which `mic-drop` reads automatically. If you skipped that step, pass `--cache-dir` explicitly to a persistent directory. Without either, Tortoise defaults to `~/.cache/tortoise-tts`. |
+| Different voices have poor prosody | Try various built-in voices with `--tortoise-voice` (tom, daniel, william, pat, etc.). Use `--save-intermediate` to hear the Tortoise output before RVC transformation. Prosody comes from Tortoise; voice timbre comes from RVC. |
 
 ---
 

@@ -176,6 +176,7 @@ class TortoiseEngine:
         ``NotImplementedError`` during loading, this method logs a warning
         and transparently retries on CPU.
         """
+        import os
         from tortoise.api import TextToSpeech  # heavy — deferred
 
         logger.info(
@@ -187,6 +188,9 @@ class TortoiseEngine:
         if self.cache_dir is not None:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             tt_kwargs["models_dir"] = str(self.cache_dir)
+            # Also set HuggingFace environment variables to use this cache
+            os.environ["HF_HOME"] = str(self.cache_dir)
+            os.environ["HUGGINGFACE_HUB_CACHE"] = str(self.cache_dir)
             logger.info("Tortoise model cache → %s", self.cache_dir)
 
         try:
@@ -257,7 +261,7 @@ class TortoiseEngine:
         4. String          → attempt to use as a built-in voice name
         """
         import torch
-        from tortoise.utils.audio import load_audio
+        from tortoise.utils.audio import load_audio, load_voice
 
         if self.voice is None:
             logger.info("No voice specified — using random conditioning latents.")
@@ -284,6 +288,13 @@ class TortoiseEngine:
             cond_latents = self._tts.get_conditioning_latents(clip)
             return clip, cond_latents
 
-        # --- built-in voice name (falls back to tts.load_voice) ---
+        # --- built-in voice name (use tortoise.utils.audio.load_voice) ---
         logger.info("Attempting built-in Tortoise voice: %s", self.voice)
-        return self._tts.load_voice(self.voice)
+        clips, latents = load_voice(self.voice)
+
+        # If we got clips but no pre-computed latents, compute them now
+        if clips is not None and latents is None:
+            # clips is a list of variable-length tensors, pass directly to get_conditioning_latents
+            latents = self._tts.get_conditioning_latents(clips)
+
+        return clips, latents
