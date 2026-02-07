@@ -121,7 +121,7 @@ def test_load_missing_api_key():
 def test_load_missing_openai_library():
     """Test error when openai library not installed."""
     engine = OpenAITTSEngine(api_key="sk-test")
-    with patch("tts_pipeline.openai_tts.OpenAI", side_effect=ImportError("No module named 'openai'")):
+    with patch("tts_pipeline.openai_tts.OpenAI", None):
         with pytest.raises(ImportError, match="openai library is required"):
             engine.load()
 
@@ -222,11 +222,12 @@ def test_synthesize_long_text_chunking(mock_openai_class):
 @patch("tts_pipeline.openai_tts.OpenAI")
 def test_synthesize_rate_limit_error(mock_openai_class):
     """Test rate limit error is caught and re-raised with helpful message."""
+    # Create an exception class that looks like OpenAI's RateLimitError
+    class RateLimitError(Exception):
+        pass
+
     mock_client = Mock()
-    # Create an exception that looks like OpenAI's RateLimitError
-    rate_limit_error = Exception("Rate limit exceeded")
-    rate_limit_error.__class__.__name__ = "RateLimitError"
-    mock_client.audio.speech.create.side_effect = rate_limit_error
+    mock_client.audio.speech.create.side_effect = RateLimitError("Rate limit exceeded")
     mock_openai_class.return_value = mock_client
 
     engine = OpenAITTSEngine(api_key="sk-test")
@@ -237,11 +238,12 @@ def test_synthesize_rate_limit_error(mock_openai_class):
 @patch("tts_pipeline.openai_tts.OpenAI")
 def test_synthesize_auth_error(mock_openai_class):
     """Test authentication error is caught with helpful message."""
+    # Create an exception class that looks like OpenAI's AuthenticationError
+    class AuthenticationError(Exception):
+        pass
+
     mock_client = Mock()
-    # Create an exception that looks like OpenAI's AuthenticationError
-    auth_error = Exception("Invalid API key")
-    auth_error.__class__.__name__ = "AuthenticationError"
-    mock_client.audio.speech.create.side_effect = auth_error
+    mock_client.audio.speech.create.side_effect = AuthenticationError("Invalid API key")
     mock_openai_class.return_value = mock_client
 
     engine = OpenAITTSEngine(api_key="sk-test")
@@ -252,10 +254,12 @@ def test_synthesize_auth_error(mock_openai_class):
 @patch("tts_pipeline.openai_tts.OpenAI")
 def test_synthesize_api_error(mock_openai_class):
     """Test generic API error is caught."""
+    # Create an exception class that looks like OpenAI's APIError
+    class APIError(Exception):
+        pass
+
     mock_client = Mock()
-    api_error = Exception("API error occurred")
-    api_error.__class__.__name__ = "APIError"
-    mock_client.audio.speech.create.side_effect = api_error
+    mock_client.audio.speech.create.side_effect = APIError("API error occurred")
     mock_openai_class.return_value = mock_client
 
     engine = OpenAITTSEngine(api_key="sk-test")
@@ -267,9 +271,8 @@ def test_synthesize_api_error(mock_openai_class):
 def test_synthesize_network_error(mock_openai_class):
     """Test network error is caught with helpful message."""
     mock_client = Mock()
-    network_error = Exception("Connection timeout")
-    network_error.__class__.__name__ = "ConnectionError"
-    mock_client.audio.speech.create.side_effect = network_error
+    # Use built-in ConnectionError
+    mock_client.audio.speech.create.side_effect = ConnectionError("Connection timeout")
     mock_openai_class.return_value = mock_client
 
     engine = OpenAITTSEngine(api_key="sk-test")

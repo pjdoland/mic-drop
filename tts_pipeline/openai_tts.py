@@ -20,6 +20,12 @@ import numpy as np
 # Import text processing utilities from tortoise module
 from tts_pipeline.tortoise import _normalize_text
 
+# Optional import — set to None when not installed, allows tests to mock
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None  # type: ignore
+
 logger = logging.getLogger("mic-drop.openai-tts")
 
 # OpenAI TTS outputs at this rate (matches Tortoise)
@@ -149,13 +155,11 @@ class OpenAITTSEngine:
             ImportError: If openai library is not installed.
             ValueError: If API key is missing.
         """
-        try:
-            from openai import OpenAI
-        except ImportError as exc:
+        if OpenAI is None:
             raise ImportError(
                 "openai library is required but not installed.\n"
                 "Install it with: pip install openai"
-            ) from exc
+            )
 
         if not self.api_key:
             raise ValueError(

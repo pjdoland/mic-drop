@@ -258,6 +258,11 @@ ok "mic-drop linked in editable mode"
 pip install numpy soundfile tqdm torchaudio --quiet
 ok "Runtime dependencies installed"
 
+# OpenAI TTS support (optional but included for full test coverage)
+info "Installing OpenAI TTS support …"
+pip install "openai>=1.0.0" --quiet 2>/dev/null || true
+ok "OpenAI TTS support installed"
+
 # =============================================================================
 # 7. Tortoise TTS  —  installed from GitHub source for best Apple Silicon
 #    compatibility.  Pre-dependencies are installed first so that
@@ -405,6 +410,7 @@ check_core "tortoise"      "tortoise-tts"
 check_core "rvc_python"    "rvc-python"
 check_core "fairseq"       "fairseq"
 check_core "librosa"       "librosa"
+check_core "openai"        "openai"
 
 # Device summary (heredoc keeps the Python quoting painless)
 printf "\n"
