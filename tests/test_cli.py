@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from tts_pipeline.cli import CliError, _load_config, _apply_config_defaults, build_parser
+from tts_pipeline.cli import CliError, _apply_config_defaults, build_parser
+from tts_pipeline.config import load_config as _load_config
 
 
 # ---------------------------------------------------------------------------

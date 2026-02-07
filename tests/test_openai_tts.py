@@ -4,11 +4,11 @@ import pytest
 import numpy as np
 from unittest.mock import Mock, patch, MagicMock
 
-from tts_pipeline.openai_tts import (
+from tts_pipeline.engines.openai_engine import (
     OpenAITTSEngine,
-    _split_for_openai,
     MAX_CHARS_PER_REQUEST,
 )
+from tts_pipeline.text_processing import split_by_char_limit
 
 
 # ---------------------------------------------------------------------------
@@ -16,27 +16,27 @@ from tts_pipeline.openai_tts import (
 # ---------------------------------------------------------------------------
 
 
-def test_split_for_openai_short_text():
+def testsplit_by_char_limit_short_text():
     """Test text under limit is not split."""
     text = "Short text that fits easily."
-    chunks = _split_for_openai(text)
+    chunks = split_by_char_limit(text)
     assert len(chunks) == 1
     assert chunks[0] == text
 
 
-def test_split_for_openai_exact_limit():
+def testsplit_by_char_limit_exact_limit():
     """Test text exactly at limit is not split."""
     text = "A" * MAX_CHARS_PER_REQUEST
-    chunks = _split_for_openai(text)
+    chunks = split_by_char_limit(text)
     assert len(chunks) == 1
     assert chunks[0] == text
 
 
-def test_split_for_openai_long_text():
+def testsplit_by_char_limit_long_text():
     """Test long text is split into multiple chunks."""
     # Create text that exceeds the limit
     long_text = ". ".join(["Sentence number {}".format(i) for i in range(1000)])
-    chunks = _split_for_openai(long_text)
+    chunks = split_by_char_limit(long_text)
 
     assert len(chunks) > 1
     for chunk in chunks:
@@ -45,12 +45,12 @@ def test_split_for_openai_long_text():
     assert " ".join(chunks).replace(" . ", ". ") == long_text
 
 
-def test_split_for_openai_sentence_boundary():
+def testsplit_by_char_limit_sentence_boundary():
     """Test splitting respects sentence boundaries."""
     # Multiple sentences that together exceed limit
     sentences = [f"Sentence {i}." for i in range(100)]
     text = " ".join(sentences)
-    chunks = _split_for_openai(text, max_chars=200)
+    chunks = split_by_char_limit(text, max_chars=200)
 
     assert len(chunks) > 1
     # Each chunk should end with a sentence
@@ -58,11 +58,11 @@ def test_split_for_openai_sentence_boundary():
         assert chunk.strip().endswith(".")
 
 
-def test_split_for_openai_oversized_sentence():
+def testsplit_by_char_limit_oversized_sentence():
     """Test handling of single sentence exceeding limit."""
     # Single very long sentence
     long_sentence = " ".join(["word"] * 1000) + "."
-    chunks = _split_for_openai(long_sentence, max_chars=200)
+    chunks = split_by_char_limit(long_sentence, max_chars=200)
 
     assert len(chunks) > 1
     for chunk in chunks:
@@ -121,12 +121,12 @@ def test_load_missing_api_key():
 def test_load_missing_openai_library():
     """Test error when openai library not installed."""
     engine = OpenAITTSEngine(api_key="sk-test")
-    with patch("tts_pipeline.openai_tts.OpenAI", None):
+    with patch("tts_pipeline.engines.openai_engine.OpenAI", None):
         with pytest.raises(ImportError, match="openai library is required"):
             engine.load()
 
 
-@patch("tts_pipeline.openai_tts.OpenAI")
+@patch("tts_pipeline.engines.openai_engine.OpenAI")
 def test_load_success(mock_openai_class):
     """Test successful client initialization."""
     mock_client = Mock()
@@ -144,7 +144,7 @@ def test_load_success(mock_openai_class):
 # ---------------------------------------------------------------------------
 
 
-@patch("tts_pipeline.openai_tts.OpenAI")
+@patch("tts_pipeline.engines.openai_engine.OpenAI")
 def test_synthesize_success(mock_openai_class):
     """Test successful synthesis returns numpy array."""
     # Mock API response
@@ -174,7 +174,7 @@ def test_synthesize_success(mock_openai_class):
     assert call_kwargs["response_format"] == "pcm"
 
 
-@patch("tts_pipeline.openai_tts.OpenAI")
+@patch("tts_pipeline.engines.openai_engine.OpenAI")
 def test_synthesize_empty_text(mock_openai_class):
     """Test error on empty text."""
     engine = OpenAITTSEngine(api_key="sk-test")
@@ -182,7 +182,7 @@ def test_synthesize_empty_text(mock_openai_class):
         engine.synthesize("")
 
 
-@patch("tts_pipeline.openai_tts.OpenAI")
+@patch("tts_pipeline.engines.openai_engine.OpenAI")
 def test_synthesize_whitespace_only(mock_openai_class):
     """Test error on whitespace-only text."""
     engine = OpenAITTSEngine(api_key="sk-test")
@@ -190,7 +190,7 @@ def test_synthesize_whitespace_only(mock_openai_class):
         engine.synthesize("   \n\t  ")
 
 
-@patch("tts_pipeline.openai_tts.OpenAI")
+@patch("tts_pipeline.engines.openai_engine.OpenAI")
 def test_synthesize_long_text_chunking(mock_openai_class):
     """Test long text is split and concatenated."""
     # Mock API response
@@ -219,7 +219,7 @@ def test_synthesize_long_text_chunking(mock_openai_class):
     assert len(result) == 1000 * mock_client.audio.speech.create.call_count
 
 
-@patch("tts_pipeline.openai_tts.OpenAI")
+@patch("tts_pipeline.engines.openai_engine.OpenAI")
 def test_synthesize_rate_limit_error(mock_openai_class):
     """Test rate limit error is caught and re-raised with helpful message."""
     # Create an exception class that looks like OpenAI's RateLimitError
@@ -235,7 +235,7 @@ def test_synthesize_rate_limit_error(mock_openai_class):
         engine.synthesize("Test text")
 
 
-@patch("tts_pipeline.openai_tts.OpenAI")
+@patch("tts_pipeline.engines.openai_engine.OpenAI")
 def test_synthesize_auth_error(mock_openai_class):
     """Test authentication error is caught with helpful message."""
     # Create an exception class that looks like OpenAI's AuthenticationError
@@ -251,7 +251,7 @@ def test_synthesize_auth_error(mock_openai_class):
         engine.synthesize("Test text")
 
 
-@patch("tts_pipeline.openai_tts.OpenAI")
+@patch("tts_pipeline.engines.openai_engine.OpenAI")
 def test_synthesize_api_error(mock_openai_class):
     """Test generic API error is caught."""
     # Create an exception class that looks like OpenAI's APIError
@@ -267,7 +267,7 @@ def test_synthesize_api_error(mock_openai_class):
         engine.synthesize("Test text")
 
 
-@patch("tts_pipeline.openai_tts.OpenAI")
+@patch("tts_pipeline.engines.openai_engine.OpenAI")
 def test_synthesize_network_error(mock_openai_class):
     """Test network error is caught with helpful message."""
     mock_client = Mock()
@@ -280,7 +280,7 @@ def test_synthesize_network_error(mock_openai_class):
         engine.synthesize("Test text")
 
 
-@patch("tts_pipeline.openai_tts.OpenAI")
+@patch("tts_pipeline.engines.openai_engine.OpenAI")
 def test_synthesize_lazy_loading(mock_openai_class):
     """Test client is loaded automatically on first synthesize call."""
     mock_client = Mock()
@@ -303,7 +303,7 @@ def test_synthesize_lazy_loading(mock_openai_class):
 # ---------------------------------------------------------------------------
 
 
-@patch("tts_pipeline.openai_tts.OpenAI")
+@patch("tts_pipeline.engines.openai_engine.OpenAI")
 def test_synthesize_with_tts_1_model(mock_openai_class):
     """Test synthesis with tts-1 model."""
     mock_client = Mock()
@@ -319,7 +319,7 @@ def test_synthesize_with_tts_1_model(mock_openai_class):
     assert call_kwargs["model"] == "tts-1"
 
 
-@patch("tts_pipeline.openai_tts.OpenAI")
+@patch("tts_pipeline.engines.openai_engine.OpenAI")
 def test_synthesize_with_different_voices(mock_openai_class):
     """Test synthesis with different voice selections."""
     mock_client = Mock()

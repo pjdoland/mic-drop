@@ -30,46 +30,11 @@ class CliError(Exception):
         self.code = code
 
 
-# ---------------------------------------------------------------------------
-# Persistent config  (.mic-drop.env)
-# ---------------------------------------------------------------------------
-
-# Primary location: repo root (works for editable installs via setup.sh).
-# Fallback: current working directory (works when CWD is the repo root but
-# the package is installed non-editably).
-_REPO_ROOT_ENV = Path(__file__).resolve().parent.parent / ".mic-drop.env"
-
-
-def _load_config(env_path: Path | None = None) -> dict:
-    """Read key=value pairs from a mic-drop env file.
-
-    Search order when *env_path* is not given:
-        1. ``<package-root>/.mic-drop.env``   (editable install)
-        2. ``$CWD/.mic-drop.env``             (fallback)
-
-    Lines starting with ``#`` and blank lines are skipped.
-    *env_path* can be passed explicitly for testing.
-    """
-    if env_path is None:
-        env_path = _REPO_ROOT_ENV if _REPO_ROOT_ENV.is_file() else Path.cwd() / ".mic-drop.env"
-
-    config: dict = {}
-    if not env_path.is_file():
-        logger.debug("Config file not found: %s", env_path)
-        return config
-
-    logger.debug("Reading config from %s", env_path)
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, _, value = line.partition("=")
-            config[key.strip()] = value.strip()
-    return config
-
-
 def _apply_config_defaults(args: argparse.Namespace, env_path: Path | None = None) -> None:
     """Back-fill CLI args from the env file when the user didn't pass them."""
-    config = _load_config(env_path=env_path)
+    from tts_pipeline.config import load_config
+
+    config = load_config(env_path=env_path)
 
     # Tortoise cache directory
     if args.cache_dir is None:
@@ -328,10 +293,10 @@ def _maybe_strip_md(text: str, path: Path | None, flag: bool | None) -> str:
         path is not None and path.suffix.lower() == ".md"
     )
     if should_strip:
-        from tts_pipeline.tortoise import _strip_markdown
+        from tts_pipeline.text_processing import strip_markdown
 
         logger.info("Stripping Markdown formatting from input.")
-        text = _strip_markdown(text)
+        text = strip_markdown(text)
     return text
 
 

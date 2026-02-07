@@ -1,24 +1,18 @@
-"""OpenAI TTS integration for mic-drop.
+"""OpenAI TTS engine implementation.
 
-Responsibilities
-----------------
-* Lazy-load the openai library and client initialization.
-* Make API calls to OpenAI's TTS endpoint with proper error handling.
-* Apply optional instructions for voice characteristic control.
-* Return raw audio as a 1-D float32 NumPy array at 24 kHz (matching Tortoise).
+API-based text-to-speech synthesis using OpenAI's TTS models with
+support for the gpt-4o-mini-tts model with instructions.
 """
 
 from __future__ import annotations
 
 import logging
-import re
-from pathlib import Path
 from typing import Optional
 
 import numpy as np
 
-# Import text processing utilities from tortoise module
-from tts_pipeline.tortoise import _normalize_text
+from tts_pipeline.base import TTSEngine
+from tts_pipeline.text_processing import normalize_text, split_by_char_limit
 
 # Optional import — set to None when not installed, allows tests to mock
 try:
@@ -35,93 +29,15 @@ OPENAI_SAMPLE_RATE: int = 24_000
 MAX_CHARS_PER_REQUEST: int = 4096
 
 
-# ---------------------------------------------------------------------------
-# Text helpers
-# ---------------------------------------------------------------------------
-
-
-def _split_for_openai(text: str, max_chars: int = MAX_CHARS_PER_REQUEST) -> list[str]:
-    """Sentence-aware text chunking for OpenAI's character limit.
-
-    OpenAI TTS has a 4096 character limit per request. This function splits
-    on sentence boundaries to maintain natural prosody.
-
-    Args:
-        text: Input text to split
-        max_chars: Maximum characters per chunk (default: 4096)
-
-    Returns:
-        List of text chunks, each within the character limit
-    """
-    if len(text) <= max_chars:
-        return [text]
-
-    # Split into sentences; regex keeps the punctuation with the sentence.
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-
-    chunks: list[str] = []
-    buffer: list[str] = []
-    buffer_len: int = 0
-
-    for sentence in sentences:
-        sentence_len = len(sentence)
-
-        # Flush buffer if appending this sentence would exceed limit
-        if buffer_len + sentence_len + 1 > max_chars and buffer:  # +1 for space
-            chunks.append(" ".join(buffer))
-            buffer = []
-            buffer_len = 0
-
-        # Handle oversized single sentence
-        if sentence_len > max_chars:
-            # Flush any remaining buffer first
-            if buffer:
-                chunks.append(" ".join(buffer))
-                buffer = []
-                buffer_len = 0
-
-            # Hard-split the oversized sentence on word boundaries
-            words = sentence.split()
-            current_chunk: list[str] = []
-            current_len: int = 0
-
-            for word in words:
-                word_len = len(word)
-                if current_len + word_len + 1 > max_chars:  # +1 for space
-                    if current_chunk:
-                        chunks.append(" ".join(current_chunk))
-                    current_chunk = [word]
-                    current_len = word_len
-                else:
-                    current_chunk.append(word)
-                    current_len += word_len + 1  # +1 for space
-
-            if current_chunk:
-                chunks.append(" ".join(current_chunk))
-        else:
-            buffer.append(sentence)
-            buffer_len += sentence_len + 1  # +1 for space
-
-    if buffer:
-        chunks.append(" ".join(buffer))
-
-    return [c for c in chunks if c.strip()]
-
-
-# ---------------------------------------------------------------------------
-# Engine
-# ---------------------------------------------------------------------------
-
-
-class OpenAITTSEngine:
-    """Thin, lazy wrapper around OpenAI TTS API.
+class OpenAITTSEngine(TTSEngine):
+    """OpenAI TTS engine with API-based synthesis.
 
     Attributes:
-        model: OpenAI TTS model name (tts-1 or tts-1-hd).
-        voice: One of 6 OpenAI voices: alloy, echo, fable, onyx, nova, shimmer.
-        api_key: OpenAI API key (loaded from config).
-        instructions: Optional instructions for voice characteristics control.
-        device: Ignored (for interface compatibility with TortoiseEngine).
+        model: OpenAI TTS model (gpt-4o-mini-tts, tts-1, tts-1-hd)
+        voice: One of: alloy, echo, fable, onyx, nova, shimmer
+        api_key: OpenAI API key (from config)
+        instructions: Optional voice characteristic instructions (gpt-4o-mini-tts only)
+        device: Ignored (for interface compatibility)
     """
 
     def __init__(
@@ -139,21 +55,19 @@ class OpenAITTSEngine:
         self.device = device  # stored but not used (API-based, no local compute)
         self._client = None  # loaded on first use
 
-    # -- public -------------------------------------------------------------
-
     @property
     def sample_rate(self) -> int:
-        """Returns 24000 Hz to match Tortoise output."""
+        """Return OpenAI's output sample rate (24 kHz)."""
         return OPENAI_SAMPLE_RATE
 
     def load(self) -> None:
-        """Explicitly initialize the OpenAI client.
+        """Initialize the OpenAI client.
 
-        Called automatically on first call to :meth:`synthesize` if skipped.
+        Called automatically on first synthesize() call if not done explicitly.
 
         Raises:
-            ImportError: If openai library is not installed.
-            ValueError: If API key is missing.
+            ImportError: If openai library is not installed
+            ValueError: If API key is missing
         """
         if OpenAI is None:
             raise ImportError(
@@ -176,35 +90,36 @@ class OpenAITTSEngine:
         logger.info("OpenAI TTS ready.")
 
     def synthesize(self, text: str) -> np.ndarray:
-        """Synthesize text → 1-D float32 NumPy array @ 24 kHz.
+        """Synthesize text to audio.
 
-        Long texts are automatically chunked at 4096 character boundaries;
-        the resulting audio segments are concatenated in order.
+        Long texts are automatically chunked at 4096 character boundaries
+        and concatenated.
 
         Args:
             text: Input text to synthesize
 
         Returns:
-            1-D float32 numpy array of audio samples at 24 kHz
+            1-D float32 numpy array at 24 kHz
 
         Raises:
-            ValueError: If text is empty after normalization.
-            ImportError: If openai library not installed.
-            RuntimeError: If API call fails (rate limit, auth, network, etc.).
+            ValueError: If text is empty after normalization
+            ImportError: If openai library not installed
+            RuntimeError: If API call fails (rate limit, auth, network, etc.)
         """
         if self._client is None:
             self.load()
 
-        text = _normalize_text(text)
+        text = normalize_text(text)
         if not text:
             raise ValueError("Input text is empty after normalization.")
 
         # Split into chunks if necessary
-        chunks = _split_for_openai(text)
+        chunks = split_by_char_limit(text, max_chars=MAX_CHARS_PER_REQUEST)
         char_count = len(text)
-        # Pricing for gpt-4o-mini-tts and legacy models
+
+        # Calculate estimated cost
         if self.model == "gpt-4o-mini-tts":
-            cost_per_1k = 0.010  # gpt-4o-mini-tts pricing
+            cost_per_1k = 0.010
         elif self.model == "tts-1-hd":
             cost_per_1k = 0.030
         else:  # tts-1
@@ -241,19 +156,17 @@ class OpenAITTSEngine:
         logger.info("Synthesis complete: %.2f s at %d Hz.", duration, self.sample_rate)
         return audio
 
-    # -- private ------------------------------------------------------------
-
     def _synthesize_chunk(self, text: str) -> np.ndarray:
-        """Make OpenAI API call for a single chunk and convert to numpy array.
+        """Make OpenAI API call for a single chunk.
 
         Args:
-            text: Text chunk to synthesize (must be ≤ 4096 characters)
+            text: Text chunk to synthesize (≤ 4096 characters)
 
         Returns:
             1-D float32 numpy array of audio samples
 
         Raises:
-            RuntimeError: If API call fails for any reason
+            RuntimeError: If API call fails
         """
         try:
             # Build request kwargs

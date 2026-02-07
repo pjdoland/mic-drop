@@ -93,7 +93,7 @@ class Pipeline:
 
         # Initialize appropriate TTS engine
         if tts_engine == "tortoise":
-            from tts_pipeline.tortoise import TortoiseEngine
+            from tts_pipeline.engines import TortoiseEngine
             self.tts = TortoiseEngine(
                 preset=tortoise_preset,
                 device=device,
@@ -101,7 +101,7 @@ class Pipeline:
                 cache_dir=cache_dir,
             )
         elif tts_engine == "openai":
-            from tts_pipeline.openai_tts import OpenAITTSEngine
+            from tts_pipeline.engines import OpenAITTSEngine
             self.tts = OpenAITTSEngine(
                 model=openai_model,
                 voice=openai_voice,
