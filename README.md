@@ -25,7 +25,14 @@ text  ──▶  Tortoise TTS  ──▶  raw speech (24 kHz)
 
 ```bash
 ./setup.sh                          # one-time bootstrap (venv, PyTorch, deps)
+
+# With Tortoise TTS (default, local)
 echo "Hello from mic-drop." | mic-drop -o output/hello.wav -m models/your_model.pth
+
+# With OpenAI TTS (faster, requires API key)
+export OPENAI_API_KEY=sk-...
+echo "Hello from OpenAI." | mic-drop -o output/hello.wav -m models/your_model.pth \
+  --tts-engine openai --openai-voice nova
 ```
 
 ---
@@ -200,6 +207,66 @@ mic-drop -i scripts/test.txt \
 
 ---
 
+## Choosing a TTS Engine
+
+mic-drop supports two TTS backends: **Tortoise** (default, runs locally) and **OpenAI TTS** (API-based, requires subscription).
+
+### Tortoise TTS (default)
+
+**Pros:**
+- Runs entirely locally — no API costs, no data leaves your machine
+- Highly customizable voice selection via reference clips
+- Rich prosody control through different presets and voices
+- No usage limits
+
+**Cons:**
+- Slow synthesis (even ultra_fast preset takes ~30-60s for a paragraph)
+- Large model downloads (~2-4 GB on first run)
+- Requires GPU for reasonable speed
+
+### OpenAI TTS
+
+**Pros:**
+- Very fast synthesis (typically 2-5s for a paragraph)
+- No local model downloads
+- 6 high-quality voices built-in
+- Consistent quality across different text lengths
+
+**Cons:**
+- Costs money ($0.015/1K chars for tts-1, $0.030/1K chars for tts-1-hd)
+- Requires API key and internet connection
+- Less prosody control than Tortoise
+- Your text is sent to OpenAI (privacy consideration)
+
+### Usage Examples
+
+**Tortoise (default):**
+```bash
+mic-drop -i input.txt -o output.wav -m models/voice.pth
+```
+
+**OpenAI:**
+```bash
+mic-drop -i input.txt -o output.wav -m models/voice.pth \
+  --tts-engine openai \
+  --openai-voice nova
+```
+
+**With custom instructions:**
+```bash
+mic-drop -i input.txt -o output.wav -m models/voice.pth \
+  --tts-engine openai \
+  --openai-voice echo \
+  --openai-instructions "Speak in a calm, measured tone with slight pauses"
+```
+
+### When to Use Which Engine
+
+- **Tortoise**: Scripts, podcasts, audiobooks where you control prosody via voice references and have time to synthesize
+- **OpenAI**: Quick testing, iteration, large batch jobs where speed matters and you're okay with API costs
+
+---
+
 ## Usage
 
 ### Basic — file input
@@ -284,12 +351,20 @@ mic-drop -i scripts/example.txt -o output/example.wav -m models/myvoice.pth
 | `-i`, `--input` | stdin | Input `.txt` or `.md` file, or directory in `--batch` mode |
 | `-o`, `--output` | _required_ | Output WAV path, or output directory in `--batch` mode |
 | `--strip-markdown` | auto | Strip Markdown syntax before synthesis. Automatic for `.md` files; required when piping Markdown via stdin |
-| `--save-intermediate` | — | Save pre-RVC Tortoise TTS output alongside final output (with `_pre_rvc` suffix). Useful for debugging |
+| `--save-intermediate` | — | Save pre-RVC TTS output alongside final output (with `_pre_rvc` suffix). Useful for debugging |
 | `-m`, `--voice-model` | _required_ | Path to RVC `.pth` model |
 | `--rvc-index` | _none_ | Path to companion RVC `.index` file |
+| **TTS Engine Selection** | | |
+| `--tts-engine` | `tortoise` | TTS backend: `tortoise` (local, slow) or `openai` (API, fast) |
+| **Tortoise TTS Options** | | |
 | `--tortoise-preset` | `standard` | Quality preset: `ultra_fast` / `fast` / `standard` / `high_quality`. Recommend `ultra_fast` for iteration, `fast` for final output. |
 | `--tortoise-voice` | random | Built-in voice name (tom, daniel, william, pat, emma, etc.) or path to reference WAV clip(s). Affects prosody (rhythm, intonation, pacing) even when using RVC. |
-| `--cache-dir` | `.mic-drop.env`, then `~/.cache/tortoise-tts` | Tortoise model-cache directory (~2–4 GB on first run). Point at a USB drive to keep large files off your main disk |
+| `--cache-dir` | `.mic-drop.env`, then `~/.cache/tortoise-tts` | Tortoise model-cache directory (~2–4 GB on first run). Point at a USB drive to keep large files off your main disk. Not applicable for OpenAI TTS. |
+| **OpenAI TTS Options** | | |
+| `--openai-model` | `tts-1-hd` | OpenAI model: `tts-1` (faster, cheaper) or `tts-1-hd` (higher quality) |
+| `--openai-voice` | `alloy` | Voice selection: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer` |
+| `--openai-instructions` | _none_ | Optional instructions for voice characteristics (experimental) |
+| **RVC & Audio Options** | | |
 | `--rvc-pitch` | `0` | Pitch shift in semitones |
 | `--rvc-method` | `rmvpe` | Pitch extraction: `rmvpe` / `pm` / `crepe` |
 | `--sample-rate` | `44100` | Output Hz: `16000` / `22050` / `44100` / `48000` |
@@ -364,6 +439,11 @@ pytest tests/
 | `'TextToSpeech' object has no attribute 'load_voice'` | Outdated tortoise-tts installation. Fixed in latest version — update with `pip install -e .` after pulling latest changes. |
 | `stack expects each tensor to be equal size` error with `--tortoise-voice` | Fixed in latest version. The built-in voices have variable-length clips that are now handled correctly. Update with `pip install -e .`. |
 | `No space left on device` while downloading models | Your system disk is full. Use `--cache-dir` to point to a USB drive or external storage with at least 4GB free space. mic-drop now properly redirects ALL downloads (Tortoise + HuggingFace) to your chosen cache directory. |
+| `ModuleNotFoundError: openai` | Install OpenAI library: `pip install openai` |
+| `OpenAI authentication failed` | Check OPENAI_API_KEY in `.mic-drop.env`. Get a key from https://platform.openai.com/api-keys |
+| `OpenAI rate limit exceeded` | Wait a moment and retry, or switch to `--tts-engine tortoise` |
+| OpenAI TTS costs too much | Use `--openai-model tts-1` (half price of tts-1-hd) or switch to Tortoise |
+| Text is too long for OpenAI | mic-drop automatically splits long text into chunks. Check logs for chunk count. |
 | Tortoise or RVC crash on Apple Silicon | MPS support is experimental. Both engines fall back to CPU automatically on failure. Force it explicitly with `--device cpu` if the auto-fallback doesn't trigger. |
 | CUDA out of memory | Use `--tortoise-preset fast` or `ultra_fast`; fall back to `--device cpu` |
 | Audio is very quiet | The pipeline peak-normalises to 0.9 by default; check source levels |

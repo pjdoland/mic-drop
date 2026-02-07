@@ -69,12 +69,25 @@ def _load_config(env_path: Path | None = None) -> dict:
 
 def _apply_config_defaults(args: argparse.Namespace, env_path: Path | None = None) -> None:
     """Back-fill CLI args from the env file when the user didn't pass them."""
-    if args.cache_dir is not None:
-        return                          # explicit flag always wins
-    raw = _load_config(env_path=env_path).get("TORTOISE_CACHE_DIR")
-    if raw:
-        args.cache_dir = Path(raw)
-        logger.debug("cache_dir from config: %s", args.cache_dir)
+    config = _load_config(env_path=env_path)
+
+    # Tortoise cache directory
+    if args.cache_dir is None:
+        raw = config.get("TORTOISE_CACHE_DIR")
+        if raw:
+            args.cache_dir = Path(raw)
+            logger.debug("cache_dir from config: %s", args.cache_dir)
+
+    # OpenAI API key
+    if not hasattr(args, "openai_api_key"):
+        args.openai_api_key = config.get("OPENAI_API_KEY")
+        if args.openai_api_key:
+            logger.debug("openai_api_key loaded from config")
+        elif hasattr(args, "tts_engine") and args.tts_engine == "openai":
+            logger.warning(
+                "OPENAI_API_KEY not found in config. "
+                "OpenAI TTS will fail unless the key is set."
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -83,8 +96,16 @@ def _apply_config_defaults(args: argparse.Namespace, env_path: Path | None = Non
 
 _EPILOG = textwrap.dedent("""\
     examples:
-      synthesise a text file
+      synthesise with Tortoise (default)
         mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth
+
+      synthesise with OpenAI TTS
+        mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \\
+          --tts-engine openai --openai-voice nova
+
+      OpenAI with custom instructions
+        mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \\
+          --tts-engine openai --openai-instructions "Speak slowly and clearly"
 
       pipe text from stdin
         echo "Hello world." | mic-drop -o output/hello.wav -m models/myvoice.pth
@@ -93,8 +114,8 @@ _EPILOG = textwrap.dedent("""\
         mic-drop --batch -i scripts/ -o output/batch/ -m models/myvoice.pth
 
     The cache directory (where Tortoise stores ~2–4 GB of model weights) is
-    configured once by ./setup.sh and persisted in .mic-drop.env.  Override
-    any time with --cache-dir.
+    configured once by ./setup.sh and persisted in .mic-drop.env. OpenAI TTS
+    requires OPENAI_API_KEY in .mic-drop.env instead.
 
     exit codes
       0    success
@@ -107,7 +128,7 @@ _EPILOG = textwrap.dedent("""\
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mic-drop",
-        description="Local voice-cloning TTS: Tortoise TTS + RVC in one pipeline.",
+        description="Local voice-cloning TTS: Tortoise or OpenAI TTS + RVC in one pipeline.",
         epilog=_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -193,6 +214,36 @@ def build_parser() -> argparse.ArgumentParser:
             "Defaults to the value saved in .mic-drop.env by setup.sh, "
             "falling back to ~/.cache/tortoise-tts."
         ),
+    )
+
+    # -- TTS Engine Selection ------------------------------------------------
+    engine_group = parser.add_argument_group("TTS Engine")
+    engine_group.add_argument(
+        "--tts-engine",
+        choices=["tortoise", "openai"],
+        default="tortoise",
+        help="TTS backend to use (default: tortoise).",
+    )
+
+    # -- OpenAI TTS options --------------------------------------------------
+    openai_group = parser.add_argument_group("OpenAI TTS")
+    openai_group.add_argument(
+        "--openai-model",
+        choices=["tts-1", "tts-1-hd"],
+        default="tts-1-hd",
+        help="OpenAI TTS model (default: tts-1-hd for higher quality).",
+    )
+    openai_group.add_argument(
+        "--openai-voice",
+        choices=["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
+        default="alloy",
+        help="OpenAI voice selection (default: alloy).",
+    )
+    openai_group.add_argument(
+        "--openai-instructions",
+        type=str,
+        default=None,
+        help="Optional instructions to guide voice characteristics and style.",
     )
 
     # -- RVC options ---------------------------------------------------------
@@ -334,6 +385,14 @@ def _run(args: argparse.Namespace) -> None:
     _apply_config_defaults(args)
 
     # -- Pre-flight validation ------------------------------------------
+    # Validate OpenAI TTS requirements
+    if args.tts_engine == "openai":
+        if not getattr(args, "openai_api_key", None):
+            raise CliError(
+                "OPENAI_API_KEY is required for OpenAI TTS.\n"
+                "  Set it in .mic-drop.env or pass via environment variable."
+            )
+
     if not args.voice_model.exists():
         raise CliError(f"Voice model not found: {args.voice_model}")
 
@@ -380,8 +439,16 @@ def _build_pipeline(args: argparse.Namespace):  # noqa: ANN202
     return Pipeline(
         voice_model_path=args.voice_model,
         rvc_index_path=args.rvc_index,
+        tts_engine=args.tts_engine,
+        # Tortoise params
         tortoise_preset=args.tortoise_preset,
         tortoise_voice=args.tortoise_voice,
+        # OpenAI params
+        openai_model=getattr(args, "openai_model", "tts-1-hd"),
+        openai_voice=getattr(args, "openai_voice", "alloy"),
+        openai_api_key=getattr(args, "openai_api_key", None),
+        openai_instructions=getattr(args, "openai_instructions", None),
+        # Common params
         rvc_pitch=args.rvc_pitch,
         rvc_method=args.rvc_method,
         output_sample_rate=args.sample_rate,

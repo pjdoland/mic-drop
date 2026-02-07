@@ -27,10 +27,25 @@ class Pipeline:
         Path to the RVC ``.pth`` model.
     rvc_index_path:
         Optional companion ``.index`` file for the RVC model.
+    tts_engine:
+        TTS backend to use: ``tortoise`` (default, local) or ``openai`` (API-based).
     tortoise_preset:
         Tortoise quality preset (``ultra_fast`` … ``high_quality``).
+        Ignored when using OpenAI TTS.
     tortoise_voice:
         Built-in voice name, WAV clip path/directory, or ``None`` (random).
+        Ignored when using OpenAI TTS.
+    openai_model:
+        OpenAI TTS model: ``tts-1`` or ``tts-1-hd`` (default).
+        Ignored when using Tortoise.
+    openai_voice:
+        OpenAI voice selection: ``alloy``, ``echo``, ``fable``, ``onyx``,
+        ``nova``, or ``shimmer``. Ignored when using Tortoise.
+    openai_api_key:
+        OpenAI API key. Required when using OpenAI TTS. Ignored when using Tortoise.
+    openai_instructions:
+        Optional instructions for OpenAI voice characteristics.
+        Ignored when using Tortoise.
     rvc_pitch:
         Semitone pitch shift for RVC.
     rvc_method:
@@ -39,12 +54,13 @@ class Pipeline:
         Target Hz for the final WAV file.
     device:
         Torch device (``auto``, ``cpu``, ``cuda``, ``mps``).
+        Ignored for OpenAI TTS (API-based, no local compute).
     cache_dir:
         Directory where Tortoise downloads its model weights (~2–4 GB).
         Useful when running from a USB drive.  ``None`` uses the Tortoise
-        default (``~/.cache/tortoise-tts``).
+        default (``~/.cache/tortoise-tts``). Not applicable for OpenAI TTS.
     save_intermediate:
-        If ``True``, save the pre-RVC Tortoise TTS output alongside the
+        If ``True``, save the pre-RVC TTS output alongside the
         final output file (with ``_pre_rvc`` suffix).
     """
 
@@ -52,8 +68,16 @@ class Pipeline:
         self,
         voice_model_path: Path,
         rvc_index_path: Optional[Path] = None,
+        tts_engine: str = "tortoise",
+        # Tortoise-specific parameters
         tortoise_preset: str = "standard",
         tortoise_voice: Optional[str] = None,
+        # OpenAI-specific parameters
+        openai_model: str = "tts-1-hd",
+        openai_voice: str = "alloy",
+        openai_api_key: Optional[str] = None,
+        openai_instructions: Optional[str] = None,
+        # Common parameters
         rvc_pitch: int = 0,
         rvc_method: str = "rmvpe",
         output_sample_rate: int = 44_100,
@@ -61,18 +85,36 @@ class Pipeline:
         cache_dir: Optional[Path] = None,
         save_intermediate: bool = False,
     ) -> None:
-        from tts_pipeline.tortoise import TortoiseEngine
         from tts_pipeline.rvc import RVCEngine
 
         self.output_sample_rate = output_sample_rate
         self.save_intermediate = save_intermediate
+        self.tts_engine_name = tts_engine
 
-        self.tortoise = TortoiseEngine(
-            preset=tortoise_preset,
-            device=device,
-            voice=tortoise_voice,
-            cache_dir=cache_dir,
-        )
+        # Initialize appropriate TTS engine
+        if tts_engine == "tortoise":
+            from tts_pipeline.tortoise import TortoiseEngine
+            self.tts = TortoiseEngine(
+                preset=tortoise_preset,
+                device=device,
+                voice=tortoise_voice,
+                cache_dir=cache_dir,
+            )
+        elif tts_engine == "openai":
+            from tts_pipeline.openai_tts import OpenAITTSEngine
+            self.tts = OpenAITTSEngine(
+                model=openai_model,
+                voice=openai_voice,
+                api_key=openai_api_key,
+                instructions=openai_instructions,
+                device=device,
+            )
+        else:
+            raise ValueError(
+                f"Unknown TTS engine: {tts_engine}\n"
+                f"Supported engines: 'tortoise', 'openai'"
+            )
+
         self.rvc = RVCEngine(
             model_path=voice_model_path,
             index_path=rvc_index_path,
@@ -88,21 +130,25 @@ class Pipeline:
 
         Stages
         ------
-        1. Tortoise TTS   – text → raw speech (24 kHz)
-        2. RVC            – raw speech → cloned voice (16 kHz)
-        3. Post-process   – resample to target rate, peak-normalise, write WAV
+        1. TTS (Tortoise or OpenAI)   – text → raw speech (24 kHz)
+        2. RVC                        – raw speech → cloned voice (16 kHz)
+        3. Post-process               – resample to target rate, peak-normalise, write WAV
         """
         logger.info("=== mic-drop pipeline started ===")
 
-        # Stage 1 – synthesis
-        logger.info("Stage 1/3: Tortoise TTS synthesis")
-        raw_audio: np.ndarray = self.tortoise.synthesize(text)
-        raw_sr: int = self.tortoise.sample_rate
+        # Stage 1 – synthesis (engine-agnostic)
+        logger.info("Stage 1/3: %s TTS synthesis", self.tts_engine_name.title())
+        raw_audio: np.ndarray = self.tts.synthesize(text)
+        raw_sr: int = self.tts.sample_rate
 
         # Optionally save pre-RVC intermediate audio
         if self.save_intermediate:
             intermediate_path = output_path.parent / f"{output_path.stem}_pre_rvc{output_path.suffix}"
-            logger.info("Saving intermediate Tortoise output → %s", intermediate_path)
+            logger.info(
+                "Saving intermediate %s output → %s",
+                self.tts_engine_name.title(),
+                intermediate_path,
+            )
             intermediate = _peak_normalize(raw_audio)
             _write_wav(intermediate, raw_sr, intermediate_path)
 

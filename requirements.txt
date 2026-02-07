@@ -30,11 +30,19 @@ numpy>=1.24.0
 tqdm>=4.65.0
 
 # ---------------------------------------------------------------------------
-# Optional: Tortoise TTS
+# Optional: Tortoise TTS (default engine)
 #   Installed best-effort by setup.sh.  Manual fallback:
 #       pip install tortoise-tts
 # ---------------------------------------------------------------------------
 tortoise-tts>=0.1.0
+
+# ---------------------------------------------------------------------------
+# Optional: OpenAI TTS (alternative engine)
+#   Requires API key in .mic-drop.env (OPENAI_API_KEY=sk-...).
+#   Install with:
+#       pip install openai
+# ---------------------------------------------------------------------------
+openai>=1.0.0
 
 # ---------------------------------------------------------------------------
 # Optional: RVC voice conversion
