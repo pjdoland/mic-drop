@@ -36,8 +36,8 @@ class Pipeline:
         Built-in voice name, WAV clip path/directory, or ``None`` (random).
         Ignored when using OpenAI TTS.
     openai_model:
-        OpenAI TTS model: ``tts-1`` or ``tts-1-hd`` (default).
-        Ignored when using Tortoise.
+        OpenAI TTS model: ``gpt-4o-mini-tts`` (default, supports instructions),
+        ``tts-1``, or ``tts-1-hd``. Ignored when using Tortoise.
     openai_voice:
         OpenAI voice selection: ``alloy``, ``echo``, ``fable``, ``onyx``,
         ``nova``, or ``shimmer``. Ignored when using Tortoise.
@@ -73,7 +73,7 @@ class Pipeline:
         tortoise_preset: str = "standard",
         tortoise_voice: Optional[str] = None,
         # OpenAI-specific parameters
-        openai_model: str = "tts-1-hd",
+        openai_model: str = "gpt-4o-mini-tts",
         openai_voice: str = "alloy",
         openai_api_key: Optional[str] = None,
         openai_instructions: Optional[str] = None,

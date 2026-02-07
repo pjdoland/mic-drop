@@ -120,7 +120,7 @@ class OpenAITTSEngine:
 
     def __init__(
         self,
-        model: str = "tts-1-hd",
+        model: str = "gpt-4o-mini-tts",
         voice: str = "alloy",
         api_key: Optional[str] = None,
         instructions: Optional[str] = None,
@@ -198,7 +198,13 @@ class OpenAITTSEngine:
         # Split into chunks if necessary
         chunks = _split_for_openai(text)
         char_count = len(text)
-        cost_per_1k = 0.030 if self.model == "tts-1-hd" else 0.015
+        # Pricing for gpt-4o-mini-tts and legacy models
+        if self.model == "gpt-4o-mini-tts":
+            cost_per_1k = 0.010  # gpt-4o-mini-tts pricing
+        elif self.model == "tts-1-hd":
+            cost_per_1k = 0.030
+        else:  # tts-1
+            cost_per_1k = 0.015
         estimated_cost = (char_count / 1000) * cost_per_1k
 
         logger.info(
@@ -254,14 +260,10 @@ class OpenAITTSEngine:
                 "response_format": "pcm",  # raw 16-bit PCM at 24kHz
             }
 
-            # Note: OpenAI TTS doesn't officially support instructions parameter yet
-            # Include it anyway for future-proofing. If API rejects it, we'll catch the error.
+            # gpt-4o-mini-tts supports instructions parameter
             if self.instructions:
-                # This is experimental/future-proofing
-                # Current API may ignore or reject this parameter
-                logger.debug("Attempting to use instructions: %s", self.instructions)
-                # We'll try passing it but don't expect it to work yet
-                # kwargs["instructions"] = self.instructions
+                kwargs["instructions"] = self.instructions
+                logger.debug("Using instructions: %s", self.instructions)
 
             response = self._client.audio.speech.create(**kwargs)
 

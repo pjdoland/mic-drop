@@ -229,9 +229,9 @@ def build_parser() -> argparse.ArgumentParser:
     openai_group = parser.add_argument_group("OpenAI TTS")
     openai_group.add_argument(
         "--openai-model",
-        choices=["tts-1", "tts-1-hd"],
-        default="tts-1-hd",
-        help="OpenAI TTS model (default: tts-1-hd for higher quality).",
+        choices=["gpt-4o-mini-tts", "tts-1", "tts-1-hd"],
+        default="gpt-4o-mini-tts",
+        help="OpenAI TTS model (default: gpt-4o-mini-tts with instructions support).",
     )
     openai_group.add_argument(
         "--openai-voice",
@@ -444,7 +444,7 @@ def _build_pipeline(args: argparse.Namespace):  # noqa: ANN202
         tortoise_preset=args.tortoise_preset,
         tortoise_voice=args.tortoise_voice,
         # OpenAI params
-        openai_model=getattr(args, "openai_model", "tts-1-hd"),
+        openai_model=getattr(args, "openai_model", "gpt-4o-mini-tts"),
         openai_voice=getattr(args, "openai_voice", "alloy"),
         openai_api_key=getattr(args, "openai_api_key", None),
         openai_instructions=getattr(args, "openai_instructions", None),

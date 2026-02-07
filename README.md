@@ -233,9 +233,9 @@ mic-drop supports two TTS backends: **Tortoise** (default, runs locally) and **O
 - Consistent quality across different text lengths
 
 **Cons:**
-- Costs money ($0.015/1K chars for tts-1, $0.030/1K chars for tts-1-hd)
+- Costs money ($0.010/1K chars for gpt-4o-mini-tts, $0.015/1K for tts-1, $0.030/1K for tts-1-hd)
 - Requires API key and internet connection
-- Less prosody control than Tortoise
+- Less prosody control than Tortoise (though gpt-4o-mini-tts supports instructions)
 - Your text is sent to OpenAI (privacy consideration)
 
 ### Usage Examples
@@ -361,9 +361,9 @@ mic-drop -i scripts/example.txt -o output/example.wav -m models/myvoice.pth
 | `--tortoise-voice` | random | Built-in voice name (tom, daniel, william, pat, emma, etc.) or path to reference WAV clip(s). Affects prosody (rhythm, intonation, pacing) even when using RVC. |
 | `--cache-dir` | `.mic-drop.env`, then `~/.cache/tortoise-tts` | Tortoise model-cache directory (~2–4 GB on first run). Point at a USB drive to keep large files off your main disk. Not applicable for OpenAI TTS. |
 | **OpenAI TTS Options** | | |
-| `--openai-model` | `tts-1-hd` | OpenAI model: `tts-1` (faster, cheaper) or `tts-1-hd` (higher quality) |
+| `--openai-model` | `gpt-4o-mini-tts` | OpenAI model: `gpt-4o-mini-tts` (supports instructions), `tts-1` (faster, cheaper), or `tts-1-hd` (higher quality) |
 | `--openai-voice` | `alloy` | Voice selection: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer` |
-| `--openai-instructions` | _none_ | Optional instructions for voice characteristics (experimental) |
+| `--openai-instructions` | _none_ | Optional instructions for voice characteristics (works with gpt-4o-mini-tts) |
 | **RVC & Audio Options** | | |
 | `--rvc-pitch` | `0` | Pitch shift in semitones |
 | `--rvc-method` | `rmvpe` | Pitch extraction: `rmvpe` / `pm` / `crepe` |
@@ -442,7 +442,7 @@ pytest tests/
 | `ModuleNotFoundError: openai` | Install OpenAI library: `pip install openai` |
 | `OpenAI authentication failed` | Check OPENAI_API_KEY in `.mic-drop.env`. Get a key from https://platform.openai.com/api-keys |
 | `OpenAI rate limit exceeded` | Wait a moment and retry, or switch to `--tts-engine tortoise` |
-| OpenAI TTS costs too much | Use `--openai-model tts-1` (half price of tts-1-hd) or switch to Tortoise |
+| OpenAI TTS costs too much | Use `--openai-model gpt-4o-mini-tts` (cheapest option) or switch to Tortoise |
 | Text is too long for OpenAI | mic-drop automatically splits long text into chunks. Check logs for chunk count. |
 | Tortoise or RVC crash on Apple Silicon | MPS support is experimental. Both engines fall back to CPU automatically on failure. Force it explicitly with `--device cpu` if the auto-fallback doesn't trigger. |
 | CUDA out of memory | Use `--tortoise-preset fast` or `ultra_fast`; fall back to `--device cpu` |

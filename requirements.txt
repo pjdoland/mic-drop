@@ -38,6 +38,7 @@ tortoise-tts>=0.1.0
 
 # ---------------------------------------------------------------------------
 # Optional: OpenAI TTS (alternative engine)
+#   Supports gpt-4o-mini-tts (with instructions), tts-1, tts-1-hd models.
 #   Requires API key in .mic-drop.env (OPENAI_API_KEY=sk-...).
 #   Install with:
 #       pip install openai

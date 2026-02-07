@@ -77,7 +77,7 @@ def test_split_for_openai_oversized_sentence():
 def test_engine_initialization_defaults():
     """Test engine can be constructed with default params."""
     engine = OpenAITTSEngine(api_key="sk-test")
-    assert engine.model == "tts-1-hd"
+    assert engine.model == "gpt-4o-mini-tts"
     assert engine.voice == "alloy"
     assert engine.api_key == "sk-test"
     assert engine.instructions is None
@@ -168,7 +168,7 @@ def test_synthesize_success(mock_openai_class):
     # Verify API was called with correct parameters
     mock_client.audio.speech.create.assert_called_once()
     call_kwargs = mock_client.audio.speech.create.call_args.kwargs
-    assert call_kwargs["model"] == "tts-1-hd"
+    assert call_kwargs["model"] == "gpt-4o-mini-tts"
     assert call_kwargs["voice"] == "alloy"
     assert call_kwargs["input"] == "Test text"
     assert call_kwargs["response_format"] == "pcm"
