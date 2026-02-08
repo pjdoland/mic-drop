@@ -12,6 +12,7 @@ output/*.wav
 
 # Personal demo/presentation scripts
 scripts/demo_presentation.md
+scripts/demo.txt
 
 # IDE
 .idea/
