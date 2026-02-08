@@ -68,9 +68,9 @@ _EPILOG = textwrap.dedent("""\
         mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \\
           --tts-engine openai --openai-voice nova
 
-      OpenAI with custom instructions
+      OpenAI with custom instructions and speed
         mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \\
-          --tts-engine openai --openai-instructions "Speak slowly and clearly"
+          --tts-engine openai --openai-instructions "Speak dramatically" --openai-speed 1.2
 
       pipe text from stdin
         echo "Hello world." | mic-drop -o output/hello.wav -m models/myvoice.pth
@@ -209,6 +209,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Optional instructions to guide voice characteristics and style.",
+    )
+    openai_group.add_argument(
+        "--openai-speed",
+        type=float,
+        default=1.0,
+        help="Speech speed multiplier: 0.25 to 4.0 (default: 1.0). Values >1.0 speed up, <1.0 slow down.",
     )
 
     # -- RVC options ---------------------------------------------------------
@@ -413,6 +419,7 @@ def _build_pipeline(args: argparse.Namespace):  # noqa: ANN202
         openai_voice=getattr(args, "openai_voice", "alloy"),
         openai_api_key=getattr(args, "openai_api_key", None),
         openai_instructions=getattr(args, "openai_instructions", None),
+        openai_speed=getattr(args, "openai_speed", 1.0),
         # Common params
         rvc_pitch=args.rvc_pitch,
         rvc_method=args.rvc_method,

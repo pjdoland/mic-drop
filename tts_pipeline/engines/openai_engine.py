@@ -37,6 +37,7 @@ class OpenAITTSEngine(TTSEngine):
         voice: One of: alloy, echo, fable, onyx, nova, shimmer
         api_key: OpenAI API key (from config)
         instructions: Optional voice characteristic instructions (gpt-4o-mini-tts only)
+        speed: Speech speed multiplier (0.25 to 4.0, default 1.0)
         device: Ignored (for interface compatibility)
     """
 
@@ -46,12 +47,14 @@ class OpenAITTSEngine(TTSEngine):
         voice: str = "alloy",
         api_key: Optional[str] = None,
         instructions: Optional[str] = None,
+        speed: float = 1.0,
         device: str = "auto",  # ignored but kept for interface compatibility
     ) -> None:
         self.model = model
         self.voice = voice
         self.api_key = api_key
         self.instructions = instructions
+        self.speed = speed
         self.device = device  # stored but not used (API-based, no local compute)
         self._client = None  # loaded on first use
 
@@ -82,9 +85,11 @@ class OpenAITTSEngine(TTSEngine):
             )
 
         logger.info(
-            "Initializing OpenAI TTS client (model=%s, voice=%s)",
+            "Initializing OpenAI TTS client (model=%s, voice=%s, speed=%.2fx, instructions=%s)",
             self.model,
             self.voice,
+            self.speed,
+            self.instructions if self.instructions else "None",
         )
         self._client = OpenAI(api_key=self.api_key)
         logger.info("OpenAI TTS ready.")
@@ -175,12 +180,13 @@ class OpenAITTSEngine(TTSEngine):
                 "voice": self.voice,
                 "input": text,
                 "response_format": "pcm",  # raw 16-bit PCM at 24kHz
+                "speed": self.speed,  # 0.25 to 4.0
             }
 
             # gpt-4o-mini-tts supports instructions parameter
-            if self.instructions:
+            if self.model == "gpt-4o-mini-tts" and self.instructions:
                 kwargs["instructions"] = self.instructions
-                logger.debug("Using instructions: %s", self.instructions)
+                logger.info("Using instructions: %s", self.instructions)
 
             response = self._client.audio.speech.create(**kwargs)
 

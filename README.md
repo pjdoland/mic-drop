@@ -177,7 +177,8 @@ mic-drop -i input.txt -o output.wav -m models/voice.pth \
 - No local model downloads
 - 6 high-quality voices built-in (alloy, echo, fable, onyx, nova, shimmer)
 - Consistent quality across different text lengths
-- Instructions support with gpt-4o-mini-tts for voice control
+- Instructions support with gpt-4o-mini-tts for tone and style control
+- Adjustable speech speed (0.25x to 4.0x)
 
 **Cons:**
 - Costs money ($0.010/1K chars for gpt-4o-mini-tts)
@@ -301,6 +302,24 @@ OpenAI provides 6 built-in voices with different characteristics:
 | `nova` | Female, energetic |
 | `shimmer` | Bright, friendly |
 
+**OpenAI Speed vs. Instructions:**
+
+OpenAI TTS provides two separate controls:
+- **`--openai-speed`** (0.25-4.0): Controls playback tempo. Use this to make speech faster or slower.
+  - `0.5` = half speed, `1.0` = normal (default), `1.5` = 50% faster, `2.0` = double speed
+- **`--openai-instructions`** (gpt-4o-mini-tts only): Controls tone, emotion, style, and character.
+  - Examples: "Speak dramatically", "Use a cheerful tone", "Sound like a professional narrator"
+
+**Example:**
+```bash
+# Fast-paced dramatic narration
+mic-drop -i script.txt -o output.wav -m models/voice.pth \
+  --tts-engine openai \
+  --openai-voice onyx \
+  --openai-speed 1.3 \
+  --openai-instructions "Speak in a dramatic movie trailer voice"
+```
+
 ### Speed vs. Quality Presets (Tortoise only)
 
 | Preset | Speed | Quality | Use case |
@@ -363,7 +382,8 @@ mic-drop \
   --tts-engine      openai \
   --openai-model    gpt-4o-mini-tts \
   --openai-voice    echo \
-  --openai-instructions "Speak dramatically with pauses for emphasis" \
+  --openai-speed    1.2 \
+  --openai-instructions "Speak dramatically like a movie trailer narrator" \
   --save-intermediate \
   --rvc-pitch       -2 \
   --rvc-method      rmvpe \
@@ -416,7 +436,8 @@ mic-drop \
 | **OpenAI TTS Options** | | |
 | `--openai-model` | `gpt-4o-mini-tts` | OpenAI model: `gpt-4o-mini-tts` (supports instructions, cheapest), `tts-1`, or `tts-1-hd` (highest quality) |
 | `--openai-voice` | `alloy` | Voice selection: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer` |
-| `--openai-instructions` | _none_ | Optional instructions for voice characteristics (works with gpt-4o-mini-tts): "Speak slowly", "Use a dramatic tone", etc. |
+| `--openai-instructions` | _none_ | Optional instructions for voice tone, style, and character (works with gpt-4o-mini-tts): "Use a dramatic tone", "Sound cheerful", etc. Note: For speed control, use `--openai-speed` instead. |
+| `--openai-speed` | `1.0` | Speech speed multiplier (0.25 to 4.0). Values >1.0 speed up, <1.0 slow down. Example: `1.5` = 50% faster, `0.75` = 25% slower |
 | **RVC & Audio Options** | | |
 | `--rvc-pitch` | `0` | Pitch shift in semitones |
 | `--rvc-method` | `rmvpe` | Pitch extraction: `rmvpe` / `pm` / `crepe` |
@@ -522,6 +543,7 @@ All 97 tests should pass.
 | `OpenAI rate limit exceeded` | Wait a moment and retry, or switch to `--tts-engine tortoise` |
 | OpenAI TTS costs too much | Use `--openai-model gpt-4o-mini-tts` (cheapest at $0.01/1K chars) or switch to Tortoise (free) |
 | Text is too long for OpenAI | mic-drop automatically splits long text into 4096-char chunks. Check logs for chunk count and estimated cost. |
+| Instructions don't affect speech speed | Use `--openai-speed` to control tempo (e.g., `1.5` for faster). Instructions only control tone/style/character. |
 
 ### Device & Performance Issues
 

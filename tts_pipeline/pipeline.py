@@ -44,8 +44,11 @@ class Pipeline:
     openai_api_key:
         OpenAI API key. Required when using OpenAI TTS. Ignored when using Tortoise.
     openai_instructions:
-        Optional instructions for OpenAI voice characteristics.
+        Optional instructions for OpenAI voice characteristics (tone, style, emotion).
         Ignored when using Tortoise.
+    openai_speed:
+        Speech speed multiplier (0.25 to 4.0, default 1.0).
+        Values >1.0 speed up, <1.0 slow down. Ignored when using Tortoise.
     rvc_pitch:
         Semitone pitch shift for RVC.
     rvc_method:
@@ -77,6 +80,7 @@ class Pipeline:
         openai_voice: str = "alloy",
         openai_api_key: Optional[str] = None,
         openai_instructions: Optional[str] = None,
+        openai_speed: float = 1.0,
         # Common parameters
         rvc_pitch: int = 0,
         rvc_method: str = "rmvpe",
@@ -107,6 +111,7 @@ class Pipeline:
                 voice=openai_voice,
                 api_key=openai_api_key,
                 instructions=openai_instructions,
+                speed=openai_speed,
                 device=device,
             )
         else:
