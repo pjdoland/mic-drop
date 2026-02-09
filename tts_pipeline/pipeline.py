@@ -24,9 +24,11 @@ class Pipeline:
     Parameters
     ----------
     voice_model_path:
-        Path to the RVC ``.pth`` model.
+        Path to the RVC ``.pth`` model. If ``None``, RVC conversion is skipped
+        and the TTS output is used directly.
     rvc_index_path:
-        Optional companion ``.index`` file for the RVC model.
+        Optional companion ``.index`` file for the RVC model. Ignored if
+        ``voice_model_path`` is ``None``.
     tts_engine:
         TTS backend to use: ``tortoise`` (default, local), ``openai`` (API-based),
         or ``coqui`` (local with voice cloning).
@@ -77,7 +79,7 @@ class Pipeline:
 
     def __init__(
         self,
-        voice_model_path: Path,
+        voice_model_path: Optional[Path] = None,
         rvc_index_path: Optional[Path] = None,
         tts_engine: str = "tortoise",
         # Tortoise-specific parameters
@@ -138,13 +140,18 @@ class Pipeline:
                 f"Supported engines: 'tortoise', 'openai', 'coqui'"
             )
 
-        self.rvc = RVCEngine(
-            model_path=voice_model_path,
-            index_path=rvc_index_path,
-            pitch=rvc_pitch,
-            method=rvc_method,
-            device=device,
-        )
+        # Initialize RVC only if a voice model is provided
+        if voice_model_path is not None:
+            self.rvc = RVCEngine(
+                model_path=voice_model_path,
+                index_path=rvc_index_path,
+                pitch=rvc_pitch,
+                method=rvc_method,
+                device=device,
+            )
+        else:
+            self.rvc = None
+            logger.info("RVC conversion disabled (no voice model provided).")
 
     # -- public -------------------------------------------------------------
 
@@ -153,9 +160,11 @@ class Pipeline:
 
         Stages
         ------
-        1. TTS (Tortoise or OpenAI)   – text → raw speech (24 kHz)
-        2. RVC                        – raw speech → cloned voice (16 kHz)
-        3. Post-process               – resample to target rate, peak-normalise, write WAV
+        1. TTS (Tortoise, Coqui, or OpenAI)  – text → raw speech (24 kHz)
+        2. RVC (optional)                     – raw speech → cloned voice (16 kHz)
+        3. Post-process                       – resample to target rate, peak-normalise, write WAV
+
+        If no voice model was provided during initialization, Stage 2 (RVC) is skipped.
         """
         logger.info("=== mic-drop pipeline started ===")
 
@@ -165,7 +174,7 @@ class Pipeline:
         raw_sr: int = self.tts.sample_rate
 
         # Optionally save pre-RVC intermediate audio
-        if self.save_intermediate:
+        if self.save_intermediate and self.rvc is not None:
             intermediate_path = output_path.parent / f"{output_path.stem}_pre_rvc{output_path.suffix}"
             logger.info(
                 "Saving intermediate %s output → %s",
@@ -175,9 +184,13 @@ class Pipeline:
             intermediate = _peak_normalize(raw_audio)
             _write_wav(intermediate, raw_sr, intermediate_path)
 
-        # Stage 2 – voice conversion
-        logger.info("Stage 2/3: RVC voice conversion")
-        converted_audio, converted_sr = self.rvc.convert(raw_audio, raw_sr)
+        # Stage 2 – voice conversion (optional)
+        if self.rvc is not None:
+            logger.info("Stage 2/3: RVC voice conversion")
+            converted_audio, converted_sr = self.rvc.convert(raw_audio, raw_sr)
+        else:
+            logger.info("Stage 2/3: RVC conversion skipped (no voice model)")
+            converted_audio, converted_sr = raw_audio, raw_sr
 
         # Stage 3 – post-processing & export
         logger.info("Stage 3/3: Resample → normalise → export")

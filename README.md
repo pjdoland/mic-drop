@@ -19,10 +19,10 @@ mic-drop is a flexible voice-cloning pipeline that lets you choose your TTS engi
                         raw speech (24 kHz)
                                │
                                ▼
-                        RVC conversion
+                   RVC conversion (optional)
                                │
                                ▼
-                      cloned voice (16 kHz)
+                  cloned voice or raw (16-24 kHz)
                                │
                                ▼
                     Resample + Normalize
@@ -33,11 +33,12 @@ mic-drop is a flexible voice-cloning pipeline that lets you choose your TTS engi
 
 **Why mic-drop?**
 - 🎭 **Three TTS engines**: Local Tortoise or Coqui, or cloud OpenAI TTS
-- 🎤 **Voice cloning**: RVC transforms any TTS into your voice, or use Coqui's built-in cloning
+- 🎤 **Voice cloning**: Optional RVC transforms any TTS into your voice, or use Coqui's built-in cloning
 - 💰 **Cost-effective**: Tortoise and Coqui are free, OpenAI is $0.01/1K chars
 - 🔒 **Privacy options**: Keep everything local with Tortoise or Coqui
 - ⚡ **Speed flexibility**: Ultra-fast API or quality local synthesis
 - 🌍 **Multilingual**: Coqui XTTS-v2 supports 17 languages
+- 🔧 **Flexible**: Use RVC for additional refinement or skip it entirely
 - 📦 **Batteries included**: One command installs everything
 
 ---
@@ -52,7 +53,11 @@ mic-drop is a flexible voice-cloning pipeline that lets you choose your TTS engi
 # With Tortoise TTS (default, local, free)
 echo "Hello from mic-drop." | mic-drop -o output/hello.wav -m models/your_model.pth
 
-# With Coqui XTTS-v2 (local, voice cloning, multilingual)
+# With Coqui XTTS-v2 (local, voice cloning, no RVC needed)
+echo "Hello from Coqui." | mic-drop -o output/hello.wav \
+  --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en
+
+# With Coqui + RVC for additional voice refinement
 echo "Hello from Coqui." | mic-drop -o output/hello.wav -m models/your_model.pth \
   --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en
 
@@ -119,9 +124,49 @@ pip install --upgrade pip
 
 ---
 
-## Obtaining an RVC voice model
+## When to Use RVC (and When to Skip It)
 
-mic-drop requires a pre-trained RVC `.pth` model — and optionally a companion `.index` file — for your target voice.
+RVC (Retrieval-based Voice Conversion) is an **optional** post-processing step that transforms the TTS output into your target voice. Here's when you might want to use it or skip it:
+
+### Use RVC When:
+- **You want consistent voice across all TTS engines** - RVC can make Tortoise, Coqui, and OpenAI all sound like your target voice
+- **You need precise voice matching** - When you need the output to match a specific person's voice exactly
+- **You're using Tortoise or OpenAI** - These engines don't have built-in voice cloning, so RVC is essential for voice matching
+- **You want to enhance Coqui's output** - Coqui has built-in cloning, but RVC can further refine it
+
+### Skip RVC When:
+- **Using Coqui with a good speaker sample** - Coqui's built-in voice cloning may be sufficient
+- **You want faster processing** - Skipping RVC cuts processing time significantly
+- **Testing TTS engine output** - When you just want to hear the raw TTS without conversion
+- **Your Coqui speaker file already has the target voice** - No need for additional conversion
+
+### Usage Examples:
+
+```bash
+# Coqui without RVC (faster, Coqui's built-in cloning only)
+mic-drop -i input.txt -o output.wav \
+  --tts-engine coqui \
+  --coqui-speaker audio/speaker.wav
+
+# Coqui with RVC (slower, additional voice refinement)
+mic-drop -i input.txt -o output.wav \
+  -m models/myvoice.pth \
+  --tts-engine coqui \
+  --coqui-speaker audio/speaker.wav
+
+# Tortoise requires RVC for voice cloning
+mic-drop -i input.txt -o output.wav \
+  -m models/myvoice.pth \
+  --tortoise-voice tom
+```
+
+---
+
+## Obtaining an RVC voice model (Optional)
+
+If you want to use RVC for voice conversion, you'll need a pre-trained RVC `.pth` model — and optionally a companion `.index` file — for your target voice.
+
+**Note:** This is only required if you want RVC conversion. You can skip RVC entirely when using Coqui with a speaker file.
 
 1. **Train your own** with [Applio](https://github.com/IAC/Applio) or the original RVC project using ~5-10 minutes of clean audio.
 2. **Download** community models (ensure you have the rights to use them).
@@ -374,14 +419,18 @@ mic-drop -i script.txt -o output.wav -m models/voice.pth \
 ### Basic — file input
 
 ```bash
-# Tortoise (default)
+# Tortoise with RVC (default)
 mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth
 
-# Coqui XTTS-v2
+# Coqui without RVC (uses built-in voice cloning)
+mic-drop -i scripts/example.txt -o output/speech.wav \
+  --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en
+
+# Coqui with RVC (additional refinement)
 mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \
   --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en
 
-# OpenAI
+# OpenAI with RVC
 mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \
   --tts-engine openai --openai-voice nova
 ```
@@ -410,7 +459,20 @@ mic-drop \
   --verbose
 ```
 
-### Full options example (Coqui)
+### Full options example (Coqui without RVC)
+
+```bash
+mic-drop \
+  --input           scripts/dramatic.txt \
+  --output          output/dramatic.wav \
+  --tts-engine      coqui \
+  --coqui-speaker   audio/speaker_sample.wav \
+  --coqui-language  en \
+  --sample-rate     48000 \
+  --verbose
+```
+
+### Full options example (Coqui with RVC)
 
 ```bash
 mic-drop \
@@ -481,8 +543,8 @@ mic-drop \
 | `-i`, `--input` | stdin | Input `.txt` or `.md` file, or directory in `--batch` mode |
 | `-o`, `--output` | _required_ | Output WAV path, or output directory in `--batch` mode |
 | `--strip-markdown` | auto | Strip Markdown syntax before synthesis. Automatic for `.md` files; required when piping Markdown via stdin |
-| `--save-intermediate` | — | Save pre-RVC TTS output alongside final output (with `_pre_rvc` suffix). Useful for debugging and comparing TTS engines |
-| `-m`, `--voice-model` | _required_ | Path to RVC `.pth` model |
+| `--save-intermediate` | — | Save pre-RVC TTS output alongside final output (with `_pre_rvc` suffix). Useful for debugging and comparing TTS engines. Only applies when using RVC. |
+| `-m`, `--voice-model` | _optional_ | Path to RVC `.pth` model. If omitted, RVC conversion is skipped and raw TTS output is used. |
 | `--rvc-index` | _none_ | Path to companion RVC `.index` file |
 | **TTS Engine Selection** | | |
 | `--tts-engine` | `tortoise` | TTS backend: `tortoise` (local, free), `coqui` (local, voice cloning), or `openai` (API, fast) |

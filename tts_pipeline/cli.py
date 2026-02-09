@@ -68,7 +68,11 @@ _EPILOG = textwrap.dedent("""\
         mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \\
           --tts-engine openai --openai-voice nova
 
-      synthesise with Coqui XTTS-v2 (voice cloning)
+      synthesise with Coqui XTTS-v2 (voice cloning, no RVC)
+        mic-drop -i scripts/example.txt -o output/speech.wav \\
+          --tts-engine coqui --coqui-speaker audio/myspeaker.wav --coqui-language en
+
+      synthesise with Coqui + RVC (additional voice refinement)
         mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \\
           --tts-engine coqui --coqui-speaker audio/myspeaker.wav --coqui-language en
 
@@ -142,13 +146,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # -- Voice model ---------------------------------------------------------
-    model_group = parser.add_argument_group("Voice Model")
+    model_group = parser.add_argument_group("Voice Model (RVC)")
     model_group.add_argument(
         "-m",
         "--voice-model",
         type=Path,
-        required=True,
-        help="Path to the RVC voice model (.pth).",
+        default=None,
+        help="Path to the RVC voice model (.pth). Optional — if omitted, RVC conversion is skipped.",
     )
     model_group.add_argument(
         "--rvc-index",
@@ -386,11 +390,14 @@ def _run(args: argparse.Namespace) -> None:
                 "  Set it in .mic-drop.env or pass via environment variable."
             )
 
-    if not args.voice_model.exists():
-        raise CliError(f"Voice model not found: {args.voice_model}")
-
-    if args.rvc_index is not None and not args.rvc_index.exists():
-        raise CliError(f"RVC index file not found: {args.rvc_index}")
+    # RVC voice model validation (optional)
+    if args.voice_model is not None:
+        if not args.voice_model.exists():
+            raise CliError(f"Voice model not found: {args.voice_model}")
+        if args.rvc_index is not None and not args.rvc_index.exists():
+            raise CliError(f"RVC index file not found: {args.rvc_index}")
+    else:
+        logger.info("No voice model specified — RVC conversion will be skipped.")
 
     # -- Dispatch -------------------------------------------------------
     if args.batch:
