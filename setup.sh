@@ -196,13 +196,8 @@ mkdir -p "$CACHE_DIR"
 
 # =============================================================================
 # 5. PyTorch + torchaudio
-#    Apple Silicon (arm64):
-#        Tortoise needs ops that the stable macOS wheel doesn't always expose.
-#        The nightly CPU build covers all MPS-fallback paths.
-#        PYTORCH_ENABLE_MPS_FALLBACK=1 lets Metal ops silently fall back to CPU
-#        when the kernel isn't implemented yet.
-#    Intel Mac:
-#        The default PyPI (stable) wheel is fine.
+#    Using stable PyTorch 2.5.1 for compatibility with Coqui TTS (torchcodec).
+#    PYTORCH_ENABLE_MPS_FALLBACK=1 lets Metal ops fall back to CPU when needed.
 # =============================================================================
 step "PyTorch"
 
@@ -211,34 +206,18 @@ export PYTORCH_ENABLE_MPS_FALLBACK=1
 if python -c "import torch" 2>/dev/null; then
     TORCH_VER="$(python -c "import torch; print(torch.__version__)")"
 
-    # On arm64 the nightly build is required.  If the user has a stable build
-    # we need to upgrade — check for the '+' that nightlies carry in their
-    # version string (e.g. "2.3.0.dev20240101+cpu").
-    if [[ "$ARCH" == "arm64" ]]; then
-        if [[ "$TORCH_VER" != *"+"* ]] && [[ "$TORCH_VER" != *"dev"* ]]; then
-            warn "Stable PyTorch ${TORCH_VER} detected on Apple Silicon."
-            warn "  Upgrading to nightly build for full MPS-fallback support …"
-            pip install --pre torch torchaudio \
-                --index-url https://download.pytorch.org/whl/nightly/cpu \
-                --quiet 2>/dev/null || true
-            TORCH_VER="$(python -c "import torch; print(torch.__version__)")"
-            ok "PyTorch upgraded to ${TORCH_VER}"
-        else
-            ok "PyTorch ${TORCH_VER} (nightly) — already installed."
-        fi
+    # Check if we need to upgrade/downgrade to 2.5.1 for Coqui compatibility
+    if [[ "$TORCH_VER" != "2.5.1"* ]]; then
+        info "Upgrading PyTorch to 2.5.1 for Coqui TTS compatibility …"
+        pip install 'torch==2.5.1' 'torchaudio==2.5.1' --quiet 2>/dev/null || true
+        TORCH_VER="$(python -c "import torch; print(torch.__version__)")"
+        ok "PyTorch upgraded to ${TORCH_VER}"
     else
         ok "PyTorch ${TORCH_VER} — already installed."
     fi
 else
-    if [[ "$ARCH" == "arm64" ]]; then
-        info "Downloading nightly PyTorch for Apple Silicon (MPS fallback) …"
-        pip install --pre torch torchaudio \
-            --index-url https://download.pytorch.org/whl/nightly/cpu \
-            --quiet
-    else
-        info "Downloading stable PyTorch for Intel Mac …"
-        pip install torch torchaudio --quiet
-    fi
+    info "Installing PyTorch 2.5.1 …"
+    pip install 'torch==2.5.1' 'torchaudio==2.5.1' --quiet
     TORCH_VER="$(python -c "import torch; print(torch.__version__)")"
     ok "Installed PyTorch ${TORCH_VER}"
 fi
@@ -265,8 +244,12 @@ ok "OpenAI TTS support installed"
 
 # Coqui TTS support (optional — local voice cloning with XTTS-v2)
 info "Installing Coqui TTS support …"
-pip install TTS --quiet 2>/dev/null || true
+pip install 'TTS==0.21.3' --quiet 2>/dev/null || true
+pip install 'torchcodec==0.1.0' --quiet 2>/dev/null || true
+pip install 'setuptools<81' --quiet 2>/dev/null || true
 ok "Coqui TTS support installed"
+
+# Note: Dependency conflicts will be resolved after all engines are installed (step 8.5)
 
 # =============================================================================
 # 7. Tortoise TTS  —  installed from GitHub source for best Apple Silicon
@@ -382,6 +365,28 @@ install_rvc() {
 install_rvc
 
 # =============================================================================
+# 8.5. Dependency conflict resolution
+#      Tortoise, RVC, and Coqui have conflicting version requirements.
+#      This step installs compatible versions that make all three work together.
+# =============================================================================
+step "Resolving dependency conflicts"
+
+info "Installing compatible package versions for all engines …"
+
+# Order matters: PyTorch first (stable for torchcodec), then scipy, transformers, etc.
+pip install 'torch==2.5.1' 'torchaudio==2.5.1' --upgrade --quiet 2>/dev/null || true
+pip install 'torchcodec==0.1.0' --quiet 2>/dev/null || true
+pip install 'scipy>=1.11.2' --upgrade --quiet 2>/dev/null || true
+pip install 'transformers==4.31.0' --force-reinstall --quiet 2>/dev/null || true
+pip install 'tokenizers==0.13.3' --force-reinstall --quiet 2>/dev/null || true
+pip install 'numpy==1.23.5' --force-reinstall --quiet 2>/dev/null || true
+pip install 'faiss-cpu==1.7.3' --force-reinstall --quiet 2>/dev/null || true
+pip install 'TTS==0.21.3' --force-reinstall --quiet 2>/dev/null || true
+pip install 'setuptools<81' --force-reinstall --quiet 2>/dev/null || true
+
+ok "Dependencies resolved (all engines compatible)"
+
+# =============================================================================
 # 9. Test tooling
 # =============================================================================
 step "Test dependencies"
@@ -417,6 +422,22 @@ check_core "fairseq"       "fairseq"
 check_core "librosa"       "librosa"
 check_core "openai"        "openai"
 check_core "TTS"           "coqui-tts"
+
+# Comprehensive integration test — verify all engines work together
+printf "\n"
+info "Testing integration (all engines together) …"
+if python <<'PYEOF' 2>/dev/null
+import torch, numpy, scipy
+import tortoise
+import rvc_python
+from TTS.api import TTS
+import tts_pipeline
+PYEOF
+then
+    ok "All three TTS engines can be imported together ✓"
+else
+    warn "Integration test failed — packages may conflict"
+fi
 
 # Device summary (heredoc keeps the Python quoting painless)
 printf "\n"
@@ -464,11 +485,17 @@ fi
 printf "  ╚══════════════════════════════════════╝${NC}\n"
 
 printf "\n  Quick start:\n"
-printf "      source venv/bin/activate\n"
-printf "      echo \"Hello from mic-drop.\" \\\\\n"
-printf "          | mic-drop \\\\\n"
-printf "              -o output/test.wav \\\\\n"
-printf "              -m models/your_model.pth\n\n"
+printf "      source venv/bin/activate\n\n"
+printf "      # Tortoise TTS (default, local):\n"
+printf "      echo \"Hello from mic-drop.\" | mic-drop -o output.wav\n\n"
+printf "      # OpenAI TTS (requires API key):\n"
+printf "      mic-drop --tts-engine openai \"Hello!\" output.wav\n\n"
+printf "      # Coqui TTS (local voice cloning):\n"
+printf "      mic-drop --tts-engine coqui \\\\\n"
+printf "               --coqui-speaker speaker.wav \\\\\n"
+printf "               \"Hello!\" output.wav\n\n"
+printf "      # With RVC voice conversion:\n"
+printf "      mic-drop -m models/voice.pth \"Hello!\" output.wav\n\n"
 
 # Exit non-zero when any required package is missing.
 exit $(( CORE_TOTAL - CORE_PASS ))

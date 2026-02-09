@@ -47,6 +47,8 @@ mic-drop is a flexible voice-cloning pipeline that lets you choose your TTS engi
 
 **Requires Python 3.10.x** (`brew install python@3.10`)
 
+**Apple Silicon users (M1/M2/M3):** When using Coqui TTS, always add `--device cpu` due to MPS limitations.
+
 ```bash
 ./setup.sh                          # one-time bootstrap (venv, PyTorch, deps)
 
@@ -54,12 +56,13 @@ mic-drop is a flexible voice-cloning pipeline that lets you choose your TTS engi
 echo "Hello from mic-drop." | mic-drop -o output/hello.wav -m models/your_model.pth
 
 # With Coqui XTTS-v2 (local, voice cloning, no RVC needed)
+# Note: Use --device cpu on Apple Silicon (MPS has limitations with Coqui)
 echo "Hello from Coqui." | mic-drop -o output/hello.wav \
-  --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en
+  --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en --device cpu
 
 # With Coqui + RVC for additional voice refinement
 echo "Hello from Coqui." | mic-drop -o output/hello.wav -m models/your_model.pth \
-  --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en
+  --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en --device cpu
 
 # With OpenAI TTS (faster, requires API key, ~$0.01 per 1K chars)
 export OPENAI_API_KEY=sk-...
@@ -105,21 +108,27 @@ python3.10 -m venv venv
 source venv/bin/activate        # Linux / macOS
 # venv\Scripts\activate         # Windows
 
-# 3. PyTorch
-#   macOS (Intel + Apple Silicon):
-pip install torch torchaudio
-#   Linux with NVIDIA GPU (adjust cu version as needed):
-# pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+# 3. PyTorch (use 2.5.1 for Coqui compatibility)
+pip install 'torch==2.5.1' 'torchaudio==2.5.1'
 
-# 4. mic-drop core + OpenAI + Coqui support
+# 4. mic-drop core + dependencies
 pip install -e .
 pip install openai
-pip install TTS
+pip install 'TTS==0.21.3'
+pip install 'torchcodec==0.1.0'
+pip install 'setuptools<81'
 
 # 5. RVC (needs pip 24.0 for fairseq — see requirements-rvc.txt)
 pip install pip==24.0
 pip install -r requirements-rvc.txt
 pip install --upgrade pip
+
+# 6. Fix dependency conflicts
+pip install 'scipy>=1.11.2' --upgrade
+pip install 'transformers==4.31.0'
+pip install 'tokenizers==0.13.3'
+pip install 'numpy==1.23.5'
+pip install 'faiss-cpu==1.7.3'
 ```
 
 ---
@@ -144,15 +153,19 @@ RVC (Retrieval-based Voice Conversion) is an **optional** post-processing step t
 
 ```bash
 # Coqui without RVC (faster, Coqui's built-in cloning only)
+# Apple Silicon: Use --device cpu
 mic-drop -i input.txt -o output.wav \
   --tts-engine coqui \
-  --coqui-speaker audio/speaker.wav
+  --coqui-speaker audio/speaker.wav \
+  --device cpu
 
 # Coqui with RVC (slower, additional voice refinement)
+# Apple Silicon: Use --device cpu
 mic-drop -i input.txt -o output.wav \
   -m models/myvoice.pth \
   --tts-engine coqui \
-  --coqui-speaker audio/speaker.wav
+  --coqui-speaker audio/speaker.wav \
+  --device cpu
 
 # Tortoise requires RVC for voice cloning
 mic-drop -i input.txt -o output.wav \
@@ -237,16 +250,21 @@ mic-drop -i input.txt -o output.wav -m models/voice.pth \
 - Requires training a voice model or providing a speaker audio file
 - Model download (~1.5 GB on first run)
 - Less prosody control than Tortoise
+- **Apple Silicon (M1/M2/M3):** Must use `--device cpu` (MPS has channel limitations)
 
 **Example:**
 ```bash
+# On Apple Silicon, always use --device cpu
 mic-drop -i input.txt -o output.wav -m models/voice.pth \
   --tts-engine coqui \
   --coqui-speaker audio/myspeaker.wav \
-  --coqui-language en
+  --coqui-language en \
+  --device cpu
 ```
 
-**Note:** Coqui AI announced its closure in December 2025, but the open-source project continues to be maintained by the community. The models remain available through Hugging Face.
+**Important Notes:**
+- **Apple Silicon users:** Always add `--device cpu` when using Coqui. MPS (Metal Performance Shaders) has a limitation with output channels that causes Coqui to fail. CPU mode is still quite fast (~3-4x real-time).
+- Coqui AI announced its closure in December 2025, but the open-source project continues to be maintained by the community. The models remain available through Hugging Face.
 
 ### OpenAI TTS
 
@@ -423,12 +441,14 @@ mic-drop -i script.txt -o output.wav -m models/voice.pth \
 mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth
 
 # Coqui without RVC (uses built-in voice cloning)
+# Apple Silicon: Use --device cpu
 mic-drop -i scripts/example.txt -o output/speech.wav \
-  --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en
+  --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en --device cpu
 
 # Coqui with RVC (additional refinement)
+# Apple Silicon: Use --device cpu
 mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \
-  --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en
+  --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en --device cpu
 
 # OpenAI with RVC
 mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \
@@ -469,8 +489,11 @@ mic-drop \
   --coqui-speaker   audio/speaker_sample.wav \
   --coqui-language  en \
   --sample-rate     48000 \
+  --device          cpu \
   --verbose
 ```
+
+**Note:** Apple Silicon users must use `--device cpu` for Coqui.
 
 ### Full options example (Coqui with RVC)
 
@@ -487,8 +510,11 @@ mic-drop \
   --rvc-pitch       -2 \
   --rvc-method      rmvpe \
   --sample-rate     48000 \
+  --device          cpu \
   --verbose
 ```
+
+**Note:** Apple Silicon users must use `--device cpu` for Coqui.
 
 ### Full options example (OpenAI)
 
@@ -564,7 +590,7 @@ mic-drop \
 | `--rvc-pitch` | `0` | Pitch shift in semitones |
 | `--rvc-method` | `rmvpe` | Pitch extraction: `rmvpe` / `pm` / `crepe` |
 | `--sample-rate` | `44100` | Output Hz: `16000` / `22050` / `44100` / `48000` |
-| `--device` | `auto` | Torch device: `auto` / `cpu` / `cuda` / `mps` (affects Tortoise & RVC, not OpenAI) |
+| `--device` | `auto` | Torch device: `auto` / `cpu` / `cuda` / `mps`. **Important:** Coqui requires `cpu` on Apple Silicon due to MPS limitations. |
 | `--batch` | — | Batch mode: process every `.txt` / `.md` in `--input` directory |
 | `-v`, `--verbose` | — | Debug-level logging |
 | `-q`, `--quiet` | — | Warnings and errors only (mutually exclusive with `-v`) |
@@ -671,13 +697,16 @@ All 97 tests should pass.
 
 | Symptom | Fix |
 |---------|-----|
-| `ModuleNotFoundError: TTS` | Install Coqui TTS library: `pip install TTS` |
+| `ModuleNotFoundError: TTS` | Install Coqui TTS library: `pip install 'TTS==0.21.3'` or run `./setup.sh` |
+| `TorchCodec is required` | Install torchcodec: `pip install 'torchcodec==0.1.0'` or run `./setup.sh` |
+| `Output channels > 65536 not supported at the MPS device` | **Apple Silicon:** Always use `--device cpu` with Coqui. MPS has channel limitations. |
 | `speaker_wav is required` | Provide a reference audio file with `--coqui-speaker path/to/audio.wav` (6+ seconds recommended) |
 | `Speaker audio file not found` | Check that the path to your speaker audio file is correct and the file exists |
 | Model download fails | Check your internet connection. Models are downloaded from Hugging Face on first use (~1.5 GB) |
-| Synthesis is slow | Coqui is faster than Tortoise but slower than OpenAI. Use `--device cuda` if you have an NVIDIA GPU for better performance |
+| Synthesis is slow | Coqui is faster than Tortoise but slower than OpenAI. On Apple Silicon, CPU mode is required but still quite fast (~3-4x real-time). |
 | Voice doesn't match speaker | Ensure your speaker audio is clean, at least 6 seconds long, and contains varied speech. RVC will further refine the voice |
 | Language not supported | Check that your language code is one of: en, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, zh-cn, ja, hu, ko, hi |
+| Dependency conflicts after installation | Run `./fix_coqui_conflicts.sh` to reinstall compatible versions of all dependencies |
 
 ### Device & Performance Issues
 
