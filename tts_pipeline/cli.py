@@ -68,6 +68,10 @@ _EPILOG = textwrap.dedent("""\
         mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \\
           --tts-engine openai --openai-voice nova
 
+      synthesise with Coqui XTTS-v2 (voice cloning)
+        mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \\
+          --tts-engine coqui --coqui-speaker audio/myspeaker.wav --coqui-language en
+
       OpenAI with custom instructions and speed
         mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \\
           --tts-engine openai --openai-instructions "Speak dramatically" --openai-speed 1.2
@@ -93,7 +97,7 @@ _EPILOG = textwrap.dedent("""\
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mic-drop",
-        description="Local voice-cloning TTS: Tortoise or OpenAI TTS + RVC in one pipeline.",
+        description="Multi-engine voice-cloning TTS: Tortoise, OpenAI, or Coqui + RVC in one pipeline.",
         epilog=_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -185,7 +189,7 @@ def build_parser() -> argparse.ArgumentParser:
     engine_group = parser.add_argument_group("TTS Engine")
     engine_group.add_argument(
         "--tts-engine",
-        choices=["tortoise", "openai"],
+        choices=["tortoise", "openai", "coqui"],
         default="tortoise",
         help="TTS backend to use (default: tortoise).",
     )
@@ -215,6 +219,24 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="Speech speed multiplier: 0.25 to 4.0 (default: 1.0). Values >1.0 speed up, <1.0 slow down.",
+    )
+
+    # -- Coqui TTS options ---------------------------------------------------
+    coqui_group = parser.add_argument_group("Coqui XTTS-v2")
+    coqui_group.add_argument(
+        "--coqui-speaker",
+        type=Path,
+        default=None,
+        help="Path to speaker audio file for voice cloning (6+ seconds recommended).",
+    )
+    coqui_group.add_argument(
+        "--coqui-language",
+        type=str,
+        default="en",
+        help=(
+            "Language code: en, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, "
+            "zh-cn, ja, hu, ko, hi (default: en)."
+        ),
     )
 
     # -- RVC options ---------------------------------------------------------
@@ -420,6 +442,9 @@ def _build_pipeline(args: argparse.Namespace):  # noqa: ANN202
         openai_api_key=getattr(args, "openai_api_key", None),
         openai_instructions=getattr(args, "openai_instructions", None),
         openai_speed=getattr(args, "openai_speed", 1.0),
+        # Coqui params
+        coqui_speaker=getattr(args, "coqui_speaker", None),
+        coqui_language=getattr(args, "coqui_language", "en"),
         # Common params
         rvc_pitch=args.rvc_pitch,
         rvc_method=args.rvc_method,

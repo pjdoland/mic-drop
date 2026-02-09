@@ -263,6 +263,11 @@ info "Installing OpenAI TTS support …"
 pip install "openai>=1.0.0" --quiet 2>/dev/null || true
 ok "OpenAI TTS support installed"
 
+# Coqui TTS support (optional — local voice cloning with XTTS-v2)
+info "Installing Coqui TTS support …"
+pip install TTS --quiet 2>/dev/null || true
+ok "Coqui TTS support installed"
+
 # =============================================================================
 # 7. Tortoise TTS  —  installed from GitHub source for best Apple Silicon
 #    compatibility.  Pre-dependencies are installed first so that
@@ -411,6 +416,7 @@ check_core "rvc_python"    "rvc-python"
 check_core "fairseq"       "fairseq"
 check_core "librosa"       "librosa"
 check_core "openai"        "openai"
+check_core "TTS"           "coqui-tts"
 
 # Device summary (heredoc keeps the Python quoting painless)
 printf "\n"

@@ -2,41 +2,42 @@
 
 **Multi-engine voice-cloning TTS — local or cloud, your choice.**
 
-mic-drop is a flexible voice-cloning pipeline that lets you choose your TTS engine: run **Tortoise TTS locally** (no API costs, full privacy) or use **OpenAI TTS** (fast, cheap API). Both feed into RVC for voice cloning, giving you the best of both worlds.
+mic-drop is a flexible voice-cloning pipeline that lets you choose your TTS engine: run **Tortoise TTS** or **Coqui XTTS-v2** locally (no API costs, full privacy) or use **OpenAI TTS** (fast, cheap API). All engines feed into RVC for voice cloning, giving you the best of all worlds.
 
 ```
-                    ┌─────────────────┐
-                    │  Choose Engine  │
-                    └────────┬────────┘
-                             │
-              ┌──────────────┴──────────────┐
-              ▼                             ▼
-      Tortoise TTS                   OpenAI TTS
-    (local, no API)                (fast, $0.01/1K)
-              │                             │
-              └──────────────┬──────────────┘
-                             ▼
-                      raw speech (24 kHz)
-                             │
-                             ▼
-                      RVC conversion
-                             │
-                             ▼
-                    cloned voice (16 kHz)
-                             │
-                             ▼
-                  Resample + Normalize
-                             │
-                             ▼
-                        output.wav
+                      ┌─────────────────┐
+                      │  Choose Engine  │
+                      └────────┬────────┘
+                               │
+            ┌──────────────────┼──────────────────┐
+            ▼                  ▼                  ▼
+      Tortoise TTS       Coqui XTTS-v2     OpenAI TTS
+    (local, quality)   (local, cloning)  (fast, $0.01/1K)
+            │                  │                  │
+            └──────────────────┼──────────────────┘
+                               ▼
+                        raw speech (24 kHz)
+                               │
+                               ▼
+                        RVC conversion
+                               │
+                               ▼
+                      cloned voice (16 kHz)
+                               │
+                               ▼
+                    Resample + Normalize
+                               │
+                               ▼
+                          output.wav
 ```
 
 **Why mic-drop?**
-- 🎭 **Multiple TTS engines**: Local Tortoise or cloud OpenAI TTS
-- 🎤 **Voice cloning**: RVC transforms any TTS into your voice
-- 💰 **Cost-effective**: Tortoise is free, OpenAI is $0.01/1K chars
-- 🔒 **Privacy options**: Keep everything local with Tortoise
+- 🎭 **Three TTS engines**: Local Tortoise or Coqui, or cloud OpenAI TTS
+- 🎤 **Voice cloning**: RVC transforms any TTS into your voice, or use Coqui's built-in cloning
+- 💰 **Cost-effective**: Tortoise and Coqui are free, OpenAI is $0.01/1K chars
+- 🔒 **Privacy options**: Keep everything local with Tortoise or Coqui
 - ⚡ **Speed flexibility**: Ultra-fast API or quality local synthesis
+- 🌍 **Multilingual**: Coqui XTTS-v2 supports 17 languages
 - 📦 **Batteries included**: One command installs everything
 
 ---
@@ -50,6 +51,10 @@ mic-drop is a flexible voice-cloning pipeline that lets you choose your TTS engi
 
 # With Tortoise TTS (default, local, free)
 echo "Hello from mic-drop." | mic-drop -o output/hello.wav -m models/your_model.pth
+
+# With Coqui XTTS-v2 (local, voice cloning, multilingual)
+echo "Hello from Coqui." | mic-drop -o output/hello.wav -m models/your_model.pth \
+  --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en
 
 # With OpenAI TTS (faster, requires API key, ~$0.01 per 1K chars)
 export OPENAI_API_KEY=sk-...
@@ -101,9 +106,10 @@ pip install torch torchaudio
 #   Linux with NVIDIA GPU (adjust cu version as needed):
 # pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
 
-# 4. mic-drop core + OpenAI support
+# 4. mic-drop core + OpenAI + Coqui support
 pip install -e .
 pip install openai
+pip install TTS
 
 # 5. RVC (needs pip 24.0 for fairseq — see requirements-rvc.txt)
 pip install pip==24.0
@@ -130,21 +136,23 @@ mic-drop requires a pre-trained RVC `.pth` model — and optionally a companion 
 
 ## Choosing a TTS Engine
 
-mic-drop supports two TTS backends: **Tortoise** (local) and **OpenAI TTS** (API-based).
+mic-drop supports three TTS backends: **Tortoise** (local), **Coqui XTTS-v2** (local with voice cloning), and **OpenAI TTS** (API-based).
 
 ### Quick Comparison
 
-|  | **Tortoise TTS** | **OpenAI TTS** |
-|---|---|---|
-| **Cost** | Free | $0.010/1K chars (gpt-4o-mini-tts)<br>$0.015/1K (tts-1)<br>$0.030/1K (tts-1-hd) |
-| **Speed** | Slow (30-60s per paragraph) | Fast (2-5s per paragraph) |
-| **Privacy** | 100% local, no data leaves your machine | Text sent to OpenAI servers |
-| **Internet** | Not required | Required |
-| **Setup** | ~2-4 GB model download (one-time) | API key only |
-| **Voices** | Many built-in + custom reference clips | 6 built-in voices |
-| **Prosody Control** | Excellent (presets, voices, references) | Good (instructions with gpt-4o-mini-tts) |
-| **Quality** | Very high (especially with high_quality preset) | Very high |
-| **Limits** | None | API rate limits |
+|  | **Tortoise TTS** | **Coqui XTTS-v2** | **OpenAI TTS** |
+|---|---|---|---|
+| **Cost** | Free | Free | $0.010/1K chars (gpt-4o-mini-tts)<br>$0.015/1K (tts-1)<br>$0.030/1K (tts-1-hd) |
+| **Speed** | Slow (30-60s per paragraph) | Medium (10-20s per paragraph) | Fast (2-5s per paragraph) |
+| **Privacy** | 100% local | 100% local | Text sent to OpenAI servers |
+| **Internet** | Not required | Not required | Required |
+| **Setup** | ~2-4 GB model download | ~1.5 GB model download | API key only |
+| **Voices** | Many built-in + reference clips | Clones from 6+ sec audio | 6 built-in voices |
+| **Languages** | English only | 17 languages | Multiple languages |
+| **Voice Cloning** | Via RVC (post-process) | Built-in + RVC enhancement | Via RVC (post-process) |
+| **Prosody Control** | Excellent | Good | Good (instructions) |
+| **Quality** | Very high | Very high | Very high |
+| **Limits** | None | None | API rate limits |
 
 ### Tortoise TTS (default)
 
@@ -167,6 +175,33 @@ mic-drop -i input.txt -o output.wav -m models/voice.pth \
   --tortoise-preset fast \
   --tortoise-voice tom
 ```
+
+### Coqui XTTS-v2
+
+**Best for:** Multilingual content, fast local synthesis, built-in voice cloning from short samples.
+
+**Pros:**
+- Runs entirely locally — no API costs, no data leaves your machine
+- Fast synthesis (faster than Tortoise, slower than OpenAI)
+- Built-in voice cloning from 6+ second audio samples
+- Multilingual support: 17 languages (en, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, zh-cn, ja, hu, ko, hi)
+- No usage limits
+- RVC enhancement can further refine the cloned voice
+
+**Cons:**
+- Requires training a voice model or providing a speaker audio file
+- Model download (~1.5 GB on first run)
+- Less prosody control than Tortoise
+
+**Example:**
+```bash
+mic-drop -i input.txt -o output.wav -m models/voice.pth \
+  --tts-engine coqui \
+  --coqui-speaker audio/myspeaker.wav \
+  --coqui-language en
+```
+
+**Note:** Coqui AI announced its closure in December 2025, but the open-source project continues to be maintained by the community. The models remain available through Hugging Face.
 
 ### OpenAI TTS
 
@@ -342,6 +377,10 @@ mic-drop -i script.txt -o output.wav -m models/voice.pth \
 # Tortoise (default)
 mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth
 
+# Coqui XTTS-v2
+mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \
+  --tts-engine coqui --coqui-speaker audio/speaker.wav --coqui-language en
+
 # OpenAI
 mic-drop -i scripts/example.txt -o output/speech.wav -m models/myvoice.pth \
   --tts-engine openai --openai-voice nova
@@ -368,6 +407,24 @@ mic-drop \
   --rvc-method      rmvpe \
   --sample-rate     48000 \
   --device          cuda \
+  --verbose
+```
+
+### Full options example (Coqui)
+
+```bash
+mic-drop \
+  --input           scripts/dramatic.txt \
+  --output          output/dramatic.wav \
+  --voice-model     models/myvoice.pth \
+  --rvc-index       models/myvoice.index \
+  --tts-engine      coqui \
+  --coqui-speaker   audio/speaker_sample.wav \
+  --coqui-language  en \
+  --save-intermediate \
+  --rvc-pitch       -2 \
+  --rvc-method      rmvpe \
+  --sample-rate     48000 \
   --verbose
 ```
 
@@ -428,7 +485,7 @@ mic-drop \
 | `-m`, `--voice-model` | _required_ | Path to RVC `.pth` model |
 | `--rvc-index` | _none_ | Path to companion RVC `.index` file |
 | **TTS Engine Selection** | | |
-| `--tts-engine` | `tortoise` | TTS backend: `tortoise` (local, free) or `openai` (API, fast) |
+| `--tts-engine` | `tortoise` | TTS backend: `tortoise` (local, free), `coqui` (local, voice cloning), or `openai` (API, fast) |
 | **Tortoise TTS Options** | | |
 | `--tortoise-preset` | `standard` | Quality preset: `ultra_fast` / `fast` / `standard` / `high_quality`. Recommend `ultra_fast` for iteration, `fast` for final output. |
 | `--tortoise-voice` | random | Built-in voice name (tom, daniel, william, pat, emma, etc.) or path to reference WAV clip(s). Affects prosody (rhythm, intonation, pacing) even when using RVC. |
@@ -438,6 +495,9 @@ mic-drop \
 | `--openai-voice` | `alloy` | Voice selection: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer` |
 | `--openai-instructions` | _none_ | Optional instructions for voice tone, style, and character (works with gpt-4o-mini-tts): "Use a dramatic tone", "Sound cheerful", etc. Note: For speed control, use `--openai-speed` instead. |
 | `--openai-speed` | `1.0` | Speech speed multiplier (0.25 to 4.0). Values >1.0 speed up, <1.0 slow down. Example: `1.5` = 50% faster, `0.75` = 25% slower |
+| **Coqui XTTS-v2 Options** | | |
+| `--coqui-speaker` | _required_ | Path to speaker audio file for voice cloning (6+ seconds recommended). Required when using Coqui engine. |
+| `--coqui-language` | `en` | Language code: `en`, `es`, `fr`, `de`, `it`, `pt`, `pl`, `tr`, `ru`, `nl`, `cs`, `ar`, `zh-cn`, `ja`, `hu`, `ko`, `hi` |
 | **RVC & Audio Options** | | |
 | `--rvc-pitch` | `0` | Pitch shift in semitones |
 | `--rvc-method` | `rmvpe` | Pitch extraction: `rmvpe` / `pm` / `crepe` |
@@ -540,10 +600,22 @@ All 97 tests should pass.
 | `ModuleNotFoundError: openai` | Install OpenAI library: `pip install openai` or re-run `./setup.sh` |
 | `OPENAI_API_KEY is required` | Set your API key in `.mic-drop.env` or export it: `export OPENAI_API_KEY=sk-...` |
 | `OpenAI authentication failed` | Check OPENAI_API_KEY in `.mic-drop.env`. Get a key from https://platform.openai.com/api-keys |
-| `OpenAI rate limit exceeded` | Wait a moment and retry, or switch to `--tts-engine tortoise` |
-| OpenAI TTS costs too much | Use `--openai-model gpt-4o-mini-tts` (cheapest at $0.01/1K chars) or switch to Tortoise (free) |
+| `OpenAI rate limit exceeded` | Wait a moment and retry, or switch to `--tts-engine tortoise` or `--tts-engine coqui` |
+| OpenAI TTS costs too much | Use `--openai-model gpt-4o-mini-tts` (cheapest at $0.01/1K chars) or switch to Tortoise/Coqui (free) |
 | Text is too long for OpenAI | mic-drop automatically splits long text into 4096-char chunks. Check logs for chunk count and estimated cost. |
 | Instructions don't affect speech speed | Use `--openai-speed` to control tempo (e.g., `1.5` for faster). Instructions only control tone/style/character. |
+
+### Coqui XTTS-v2 Issues
+
+| Symptom | Fix |
+|---------|-----|
+| `ModuleNotFoundError: TTS` | Install Coqui TTS library: `pip install TTS` |
+| `speaker_wav is required` | Provide a reference audio file with `--coqui-speaker path/to/audio.wav` (6+ seconds recommended) |
+| `Speaker audio file not found` | Check that the path to your speaker audio file is correct and the file exists |
+| Model download fails | Check your internet connection. Models are downloaded from Hugging Face on first use (~1.5 GB) |
+| Synthesis is slow | Coqui is faster than Tortoise but slower than OpenAI. Use `--device cuda` if you have an NVIDIA GPU for better performance |
+| Voice doesn't match speaker | Ensure your speaker audio is clean, at least 6 seconds long, and contains varied speech. RVC will further refine the voice |
+| Language not supported | Check that your language code is one of: en, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, zh-cn, ja, hu, ko, hi |
 
 ### Device & Performance Issues
 
